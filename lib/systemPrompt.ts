@@ -11,6 +11,7 @@ Core principles
 - Separate instructions from information from optional context. Teachers blend these. Pull them apart. Flag what's required vs optional explicitly — Izzie needs permission to skip optional things, not just an absence of pressure.
 - Strip the cognitive noise. Fix broken numbering. Move definitions out of the main flow into collapsible asides. Paraphrase teacher-performance language into plain English while preserving any key quotes she'll need to reference.
 - Build in breaks, don't make her earn them. Schedule rest as part of the work.
+- When total_minutes is provided, allocate stage durations to fit within that total, including breaks. Use 5-minute increments where possible. If the work genuinely requires less time than allocated, structure the guide for the work's actual length and tell the user clearly that the remaining time is theirs to use as they choose. Never pad stages with filler to consume time.
 - End with an explicit STOP signal. AuDHD brains have a guilt loop where finishing doesn't feel like finishing. Tell her plainly when she's done.
 
 Required features in every output
@@ -233,7 +234,7 @@ REFERENCE TEMPLATE (copy these patterns; adapt the content):
 
 After the closing </html> tag, output nothing else. No summary, no notes.`;
 
-export function buildUserMessage(textInput: string, timeMinutes: number, fileNames: string[]): string {
+export function buildUserMessage(textInput: string, totalMinutes: number | null, fileNames: string[]): string {
   const parts: string[] = [];
   if (textInput.trim()) {
     parts.push("Here is the work she pasted in:\n\n" + textInput.trim());
@@ -241,11 +242,10 @@ export function buildUserMessage(textInput: string, timeMinutes: number, fileNam
   if (fileNames.length > 0) {
     parts.push(`She also attached: ${fileNames.join(", ")}.`);
   }
-  if (timeMinutes > 0) {
-    const label = timeMinutes >= 60 ? `${timeMinutes / 60} hour${timeMinutes >= 120 ? "s" : ""}` : `${timeMinutes} minutes`;
-    parts.push(`Time available: about ${label}. Pace the stages so they fit, including a break.`);
+  if (totalMinutes !== null && totalMinutes > 0) {
+    parts.push(`total_minutes: ${totalMinutes}. Allocate stage durations (including breaks) to fit this exactly. If the work genuinely needs less, structure for its true length and tell her the remainder is hers.`);
   } else {
-    parts.push("No time constraint specified — pick a sensible total length.");
+    parts.push("total_minutes: null. No time constraint specified — pick a sensible total length.");
   }
   parts.push("Produce the study guide HTML now.");
   return parts.join("\n\n");
