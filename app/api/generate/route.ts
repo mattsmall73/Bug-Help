@@ -25,7 +25,9 @@ export async function POST(req: NextRequest) {
   }
 
   const pastedText = (formData.get("text") as string | null) ?? "";
-  const timeMinutes = parseInt((formData.get("time") as string | null) ?? "0", 10) || 0;
+  const rawTotal = (formData.get("total_minutes") as string | null) ?? "";
+  const parsedTotal = parseInt(rawTotal, 10);
+  const totalMinutes: number | null = rawTotal === "" || !Number.isFinite(parsedTotal) || parsedTotal <= 0 ? null : parsedTotal;
   const files = formData.getAll("files").filter((f): f is File => f instanceof File);
 
   if (!pastedText.trim() && files.length === 0) {
@@ -74,7 +76,7 @@ export async function POST(req: NextRequest) {
   }
 
   const combinedText = [pastedText, ...extraTextNotes].filter(Boolean).join("\n\n");
-  const userMessage = buildUserMessage(combinedText, timeMinutes, fileNames);
+  const userMessage = buildUserMessage(combinedText, totalMinutes, fileNames);
 
   contentBlocks.push({ type: "text", text: userMessage });
 

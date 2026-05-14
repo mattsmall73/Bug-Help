@@ -202,6 +202,55 @@ textarea.paste-area:focus {
 .time-btn .label { font-weight: 600; display: block; margin-bottom: 2px; }
 .time-btn .sub { font-size: 12px; opacity: 0.7; }
 
+.time-manual { margin-top: 18px; }
+
+.time-manual-label {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.time-manual-row {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+
+.time-manual-field {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.time-manual-field input {
+  width: 56px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: 'Inter Tight', sans-serif;
+  font-style: normal;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.time-manual-field input::placeholder { color: var(--line); }
+
+.time-manual-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--paper);
+}
+
 .generate {
   width: 100%;
   padding: 18px;
@@ -376,4 +425,6 @@ textarea.paste-area:focus {
   .brand h1 { font-size: 32px; }
   .card { padding: 24px 20px; }
   .time-btn { min-width: 0; }
+  .time-manual-row { gap: 12px; }
+  .time-manual-field input { width: 52px; }
 }

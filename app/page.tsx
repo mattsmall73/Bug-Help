@@ -24,7 +24,9 @@ export default function Page() {
   const [files, setFiles] = useState<File[]>([]);
   const [pasteText, setPasteText] = useState("");
   const [showPaste, setShowPaste] = useState(false);
-  const [time, setTime] = useState(60);
+  const [preset, setPreset] = useState<number | null>(60);
+  const [manualHours, setManualHours] = useState<string>("");
+  const [manualMinutes, setManualMinutes] = useState<string>("");
   const [phase, setPhase] = useState<Phase>("input");
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0]);
   const [resultHtml, setResultHtml] = useState<string>("");
@@ -63,7 +65,48 @@ export default function Page() {
     return (bytes / 1048576).toFixed(1) + " MB";
   }
 
-  const hasInput = files.length > 0 || pasteText.trim().length > 0;
+  const manualTotal =
+    (parseInt(manualHours || "0", 10) || 0) * 60 + (parseInt(manualMinutes || "0", 10) || 0);
+  const hasContent = files.length > 0 || pasteText.trim().length > 0;
+  const hasDuration = preset !== null || manualTotal > 0;
+  const hasInput = hasContent && hasDuration;
+
+  function selectPreset(v: number) {
+    setPreset(v);
+    setManualHours("");
+    setManualMinutes("");
+  }
+
+  function updateManualHours(raw: string) {
+    if (raw === "") {
+      setManualHours("");
+      setPreset(null);
+      return;
+    }
+    if (!/^\d+$/.test(raw)) return;
+    const n = parseInt(raw, 10);
+    if (n < 0 || n > 4) return;
+    setManualHours(String(n));
+    setPreset(null);
+  }
+
+  function updateManualMinutes(raw: string) {
+    if (raw === "") {
+      setManualMinutes("");
+      setPreset(null);
+      return;
+    }
+    if (!/^\d+$/.test(raw)) return;
+    const n = parseInt(raw, 10);
+    if (n < 0 || n > 59) return;
+    setManualMinutes(String(n));
+    setPreset(null);
+  }
+
+  function totalMinutesPayload(): string {
+    if (preset !== null) return preset === 0 ? "" : String(preset);
+    return manualTotal > 0 ? String(manualTotal) : "";
+  }
 
   async function generate() {
     setPhase("loading");
@@ -72,7 +115,7 @@ export default function Page() {
 
     const fd = new FormData();
     fd.append("text", pasteText);
-    fd.append("time", String(time));
+    fd.append("total_minutes", totalMinutesPayload());
     files.forEach((f) => fd.append("files", f, f.name));
 
     try {
@@ -111,7 +154,9 @@ export default function Page() {
     setFiles([]);
     setPasteText("");
     setShowPaste(false);
-    setTime(60);
+    setPreset(60);
+    setManualHours("");
+    setManualMinutes("");
     setResultHtml("");
     setErrorMsg("");
     setPhase("input");
@@ -202,13 +247,45 @@ export default function Page() {
               ].map((opt) => (
                 <button
                   key={opt.v}
-                  className={`time-btn${time === opt.v ? " selected" : ""}`}
-                  onClick={() => setTime(opt.v)}
+                  className={`time-btn${preset === opt.v ? " selected" : ""}`}
+                  onClick={() => selectPreset(opt.v)}
                 >
                   <span className="label">{opt.label}</span>
                   <span className="sub">{opt.sub}</span>
                 </button>
               ))}
+            </div>
+
+            <div className="time-manual">
+              <div className="time-manual-label">or set it exactly:</div>
+              <div className="time-manual-row">
+                <label className="time-manual-field">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={1}
+                    value={manualHours}
+                    onChange={(e) => updateManualHours(e.target.value)}
+                    placeholder="0"
+                    aria-label="Hours"
+                  />
+                  <span>hours</span>
+                </label>
+                <label className="time-manual-field">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={2}
+                    value={manualMinutes}
+                    onChange={(e) => updateManualMinutes(e.target.value)}
+                    placeholder="0"
+                    aria-label="Minutes"
+                  />
+                  <span>minutes</span>
+                </label>
+              </div>
             </div>
           </div>
 
