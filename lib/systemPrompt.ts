@@ -14,7 +14,7 @@ Core principles
 - End with an explicit STOP signal. AuDHD brains have a guilt loop where finishing doesn't feel like finishing. Tell her plainly when she's done.
 
 Required features in every output
-- Timers: every working stage and every break has a countdown timer matching its duration. Pause/resume/reset controls. Soft sine-wave chime on completion (not a jarring alarm). Visual colour change — accent colour whilst running, green when done. Use the JavaScript pattern from the template. Do NOT add timers to optional stages — those need to feel genuinely optional.
+- Timers: every working stage and every break has a countdown timer matching its duration. Pause/resume/reset controls. Soft sine-wave chime on completion (not a jarring alarm). Visual colour change — accent colour whilst running, green when done. Each timer also has a small numeric input next to its display, letting Izzie override the duration in minutes — your estimate is the default, but she knows her own pace. Use the JavaScript pattern from the template. Do NOT add timers to optional stages — those need to feel genuinely optional.
 - Checkboxes: each stage has a sub-checklist. When all boxes in a stage are ticked, the stage visually fades and the progress counter at the bottom updates.
 - Stages collapse and expand: only stage 1 is open by default. Click the header to toggle. Smooth transition.
 - Progress counter at the bottom: "X of Y stages complete." When all done, it changes to something like "All done. Close the laptop."
@@ -107,6 +107,11 @@ REFERENCE TEMPLATE (copy these patterns; adapt the content):
   .timer-display { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 600; color: var(--ink); min-width: 70px; text-align: center; letter-spacing: 0.02em; }
   .timer.running .timer-display { color: var(--accent); }
   .timer.done .timer-display { color: var(--done); }
+  .timer-override { display: inline-flex; align-items: baseline; gap: 4px; font-size: 13px; color: var(--muted); }
+  .timer-input { background: transparent; border: none; border-bottom: 1px dashed var(--line); border-radius: 0; padding: 2px 2px; font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; color: var(--ink); width: 40px; text-align: center; -moz-appearance: textfield; appearance: textfield; }
+  .timer-input:hover { border-bottom-color: var(--muted); }
+  .timer-input:focus { outline: none; border-bottom-color: var(--accent); border-bottom-style: solid; }
+  .timer-input::-webkit-outer-spin-button, .timer-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .timer-buttons { display: flex; gap: 6px; }
   .timer-btn { background: var(--bg); border: 1px solid var(--line); color: var(--ink); font-family: 'Inter Tight', sans-serif; font-size: 13px; font-weight: 500; padding: 8px 14px; border-radius: 3px; cursor: pointer; transition: all 0.15s; }
   .timer-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
@@ -137,7 +142,24 @@ REFERENCE TEMPLATE (copy these patterns; adapt the content):
   <!-- Repeat .stage blocks for each stage. Use Roman numerals i, ii, iii, iv, v.
        Add a .timer block inside working stages (NOT optional ones).
        Each stage has a .first-action, a checklist, and may have a glossary or questions.
-       Optional stages should say so in the meta line and have no timer. -->
+       Optional stages should say so in the meta line and have no timer.
+
+       Timer markup looks like this — copy it inside working stages, set data-minutes
+       to the duration you've chosen and the display text to "MM:00":
+
+       <div class="timer" data-minutes="25">
+         <span class="timer-label">Focused work</span>
+         <span class="timer-display">25:00</span>
+         <span class="timer-override">
+           <input class="timer-input" type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="180" step="1" aria-label="Override duration in minutes">
+           <span>min</span>
+         </span>
+         <div class="timer-buttons">
+           <button class="timer-btn primary" onclick="startTimer(this)">Start</button>
+           <button class="timer-btn" onclick="resetTimer(this)">Reset</button>
+         </div>
+       </div>
+  -->
 
   <div class="progress" id="progress">0 of N stages complete</div>
   <div class="footnote">When the last box is ticked, you're done. Properly done. Go and do something else.</div>
@@ -213,6 +235,39 @@ REFERENCE TEMPLATE (copy these patterns; adapt the content):
     timer.classList.remove('running', 'done');
     if (startBtn) startBtn.textContent = 'Start';
   }
+  document.querySelectorAll('.timer').forEach(timer => {
+    const defaultMinutes = parseInt(timer.dataset.minutes, 10);
+    timer.dataset.defaultMinutes = defaultMinutes;
+    const input = timer.querySelector('.timer-input');
+    if (!input) return;
+    input.value = defaultMinutes;
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
+    input.addEventListener('change', () => {
+      const raw = input.value.trim();
+      const fallback = parseInt(timer.dataset.defaultMinutes, 10);
+      const current = parseInt(timer.dataset.minutes, 10);
+      let next;
+      if (raw === '') {
+        next = fallback;
+      } else if (/^\\d+$/.test(raw)) {
+        const n = parseInt(raw, 10);
+        next = (n >= 1 && n <= 180) ? n : null;
+      } else {
+        next = null;
+      }
+      if (next === null) { input.value = current; return; }
+      input.value = next;
+      timer.dataset.minutes = next;
+      const state = timerStates.get(timer);
+      if (state && state.interval) clearInterval(state.interval);
+      timerStates.delete(timer);
+      const display = timer.querySelector('.timer-display');
+      const startBtn = timer.querySelector('.timer-btn.primary');
+      display.textContent = \`\${next}:00\`;
+      timer.classList.remove('running', 'done');
+      if (startBtn) startBtn.textContent = 'Start';
+    });
+  });
   function chime() {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
