@@ -1,24 +1,29 @@
-// Body size: Vercel Functions cap requests at 4.5MB by default, which a single
-// past paper PDF can blow past. There is no App Router route-segment config to
-// raise this. The fix is a project setting: Vercel → Project → Settings →
-// Functions → enable Fluid Compute (raises the per-request body limit to
-// ~100MB on Pro). v2 backlog: switch to client-side text extraction so the
-// route never sees the raw files.
+// Body size: this route now accepts JSON with pre-extracted text only. Raw
+// file uploads happen in the browser (lib/clientExtract.ts) for PDFs and
+// Word docs, and via /api/exam/transcribe one image at a time. That keeps
+// the payload here under the Vercel 4.5MB cap even for big exam papers.
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { extractTextOnly } from "@/lib/extractText";
 import { PARSING_SYSTEM_PROMPT, buildParsingUserMessage } from "@/lib/parsingPrompt";
 import { createPaper, createSession, ParsedPaper } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+type Body = {
+  spec_text?: string;
+  paper_text?: string;
+  mark_scheme_text?: string;
+  total_minutes?: number;
+  user_name?: string | null;
+};
+
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Server is missing ANTHROPIC_API_KEY. Add it in your Vercel project settings." },
+      { error: "Server is missing ANTHROPIC_API_KEY." },
       { status: 500 }
     );
   }
@@ -32,51 +37,31 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let formData: FormData;
+  let body: Body;
   try {
-    formData = await req.formData();
+    body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Could not read upload. Try again." }, { status: 400 });
+    return NextResponse.json({ error: "Bad JSON." }, { status: 400 });
   }
 
-  const spec = formData.get("spec");
-  const paper = formData.get("paper");
-  const markScheme = formData.get("mark_scheme");
-  const userName = ((formData.get("user_name") as string | null) ?? "").trim() || null;
-  const rawTotal = (formData.get("total_minutes") as string | null) ?? "";
-  const parsedTotal = parseInt(rawTotal, 10);
+  const specText = (body.spec_text ?? "").trim();
+  const paperText = (body.paper_text ?? "").trim();
+  const markSchemeText = (body.mark_scheme_text ?? "").trim();
+  const userName = (body.user_name ?? "").toString().trim() || null;
+  const totalMinutes =
+    typeof body.total_minutes === "number" && body.total_minutes > 0
+      ? Math.floor(body.total_minutes)
+      : 0;
 
-  if (!(spec instanceof File) || !(paper instanceof File) || !(markScheme instanceof File)) {
+  if (!specText || !paperText || !markSchemeText) {
     return NextResponse.json(
-      { error: "All three uploads are required: subject specification, past paper, and mark scheme." },
+      { error: "Missing extracted text for spec, paper, or mark scheme." },
       { status: 400 }
     );
   }
-  if (!Number.isFinite(parsedTotal) || parsedTotal <= 0) {
+  if (!totalMinutes) {
     return NextResponse.json(
       { error: "Set a total time (in minutes) for the paper." },
-      { status: 400 }
-    );
-  }
-  const totalMinutes = parsedTotal;
-
-  let specText: string;
-  let paperText: string;
-  let markSchemeText: string;
-  try {
-    [specText, paperText, markSchemeText] = await Promise.all([
-      extractTextOnly(spec),
-      extractTextOnly(paper),
-      extractTextOnly(markScheme),
-    ]);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: `Could not read the uploads: ${message}` }, { status: 502 });
-  }
-
-  if (!specText.trim() || !paperText.trim() || !markSchemeText.trim()) {
-    return NextResponse.json(
-      { error: "One or more uploads came back empty. Try a clearer file or paste the text." },
       { status: 400 }
     );
   }

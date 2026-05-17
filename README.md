@@ -35,23 +35,21 @@ The whole app is in this branch. Push it to your `mattsmall73/Bug-Help` GitHub r
 
 The Help! (study guide) mode works after this step.
 
-### 4. Enable Fluid Compute (for Exam Practice uploads)
+### 4. Enable Fluid Compute (recommended)
 
-Vercel caps request bodies at 4.5MB by default, which a real past-paper PDF
-will blow past on its own — let alone the three files Exam Practice uploads
-together. Enabling Fluid Compute on the project raises the per-request limit
-to roughly 100MB on the Pro plan.
+Vercel's default 4.5MB request body cap will bite some flows. Exam Practice
+extracts text in the browser before uploading (so a 10MB PDF is fine), but
+images go via a tiny transcribe endpoint and a >4MB image will still hit the
+cap. Enabling Fluid Compute on Pro raises the per-request limit to ~100MB
+and is one toggle.
 
 1. In Vercel, open the project → **Settings** → **Functions**.
 2. Toggle **Fluid Compute** on.
 3. Redeploy once.
 
-This is required for the Exam Practice upload step. The Help! study guide
-mode is unaffected (its uploads usually stay under 4.5MB anyway).
-
-> v2 backlog: move text extraction client-side so the route never sees the
-> raw files. That removes the dependency on Fluid Compute entirely and is
-> cheaper than transcribing PDFs server-side. Not in scope for v1.
+The Help! study guide mode still uses server-side file handling and will
+hit the cap on big PDFs/images — same toggle helps. A future cleanup would
+move that flow to client-side extraction too.
 
 ### 5. Provision Neon Postgres (for Exam Practice)
 
@@ -104,10 +102,12 @@ Open <http://localhost:3000>.
 
 ### Exam Practice
 
-- `app/exam/page.tsx` — three upload slots (spec, paper, mark scheme), total time, optional name.
+- `app/exam/page.tsx` — three upload slots (spec, paper, mark scheme), total time, optional name. Extracts text in the browser before submitting so big PDFs never hit the upload cap.
 - `app/exam/[id]/page.tsx` + `AnswerClient.tsx` — the answering screen. Total-paper timer, autosave, submit.
 - `app/exam/[id]/results/page.tsx` + `ResultsClient.tsx` — the marked-paper artefact (downloadable, retake button).
-- `app/api/exam/start/route.ts` — parse uploads, create paper + session.
+- `lib/clientExtract.ts` — client-side text extraction. PDFs via pdfjs-dist, Word via mammoth's browser build, plain text via FileReader, images via the transcribe endpoint.
+- `app/api/exam/start/route.ts` — takes JSON `{spec_text, paper_text, mark_scheme_text, ...}`, parses the paper structure, creates paper + session rows.
+- `app/api/exam/transcribe/route.ts` — single-image transcription via Claude (one file at a time, stays small).
 - `app/api/exam/autosave/route.ts` — POST answers and timer state.
 - `app/api/exam/submit/route.ts` — run marking, generate results HTML, store.
 - `app/api/exam/retake/route.ts` — start a new session from an existing paper.
