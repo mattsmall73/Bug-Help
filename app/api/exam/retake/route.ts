@@ -1,3 +1,9 @@
+// Body size: Vercel Functions cap requests at 4.5MB by default. Retake
+// payloads are tiny (just a paper id), so this route is unaffected in
+// practice — note included for consistency with the other exam routes.
+// Fix for the upload-heavy routes is Vercel → Project → Settings →
+// Functions → Fluid Compute (raises to ~100MB on Pro).
+
 import { NextRequest, NextResponse } from "next/server";
 import { createSession, getPaper } from "@/lib/db";
 

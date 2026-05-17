@@ -1,3 +1,9 @@
+// Body size: Vercel Functions cap requests at 4.5MB by default. The submit
+// payload is a JSON object of all answers, so long extended-response papers
+// can approach the limit. There is no App Router route-segment config to
+// raise this. Fix is Vercel → Project → Settings → Functions → Fluid Compute
+// (raises to ~100MB on Pro).
+
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { MARKING_SYSTEM_PROMPT, buildMarkingUserMessage } from "@/lib/markingPrompt";

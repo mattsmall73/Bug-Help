@@ -1,3 +1,10 @@
+// Body size: Vercel Functions cap requests at 4.5MB by default, which a single
+// past paper PDF can blow past. There is no App Router route-segment config to
+// raise this. The fix is a project setting: Vercel → Project → Settings →
+// Functions → enable Fluid Compute (raises the per-request body limit to
+// ~100MB on Pro). v2 backlog: switch to client-side text extraction so the
+// route never sees the raw files.
+
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { extractTextOnly } from "@/lib/extractText";

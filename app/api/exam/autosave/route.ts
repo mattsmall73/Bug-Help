@@ -1,3 +1,9 @@
+// Body size: Vercel Functions cap requests at 4.5MB by default. Autosave
+// payloads are JSON answer strings; for very long extended-response answers
+// the cumulative payload can approach the limit. There is no App Router
+// route-segment config to raise this. Fix is Vercel → Project → Settings →
+// Functions → Fluid Compute (raises to ~100MB on Pro).
+
 import { NextRequest, NextResponse } from "next/server";
 import { updateSessionProgress, Answers, TimerState } from "@/lib/db";
 

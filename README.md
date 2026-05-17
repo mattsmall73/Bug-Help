@@ -35,7 +35,25 @@ The whole app is in this branch. Push it to your `mattsmall73/Bug-Help` GitHub r
 
 The Help! (study guide) mode works after this step.
 
-### 4. Provision Neon Postgres (for Exam Practice)
+### 4. Enable Fluid Compute (for Exam Practice uploads)
+
+Vercel caps request bodies at 4.5MB by default, which a real past-paper PDF
+will blow past on its own — let alone the three files Exam Practice uploads
+together. Enabling Fluid Compute on the project raises the per-request limit
+to roughly 100MB on the Pro plan.
+
+1. In Vercel, open the project → **Settings** → **Functions**.
+2. Toggle **Fluid Compute** on.
+3. Redeploy once.
+
+This is required for the Exam Practice upload step. The Help! study guide
+mode is unaffected (its uploads usually stay under 4.5MB anyway).
+
+> v2 backlog: move text extraction client-side so the route never sees the
+> raw files. That removes the dependency on Fluid Compute entirely and is
+> cheaper than transcribing PDFs server-side. Not in scope for v1.
+
+### 5. Provision Neon Postgres (for Exam Practice)
 
 Exam Practice needs a database. The Help! study guide mode does not — it uses your browser's localStorage and is unaffected by anything in this step.
 
