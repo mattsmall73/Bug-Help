@@ -1,20 +1,17 @@
-// Body size: this route now accepts JSON with pre-extracted text only. Raw
-// file uploads happen in the browser (lib/clientExtract.ts) for PDFs and
-// Word docs, and via /api/exam/transcribe one image at a time. That keeps
-// the payload here under the Vercel 4.5MB cap even for big exam papers.
-
 import { NextRequest, NextResponse } from "next/server";
+import { del } from "@vercel/blob";
 import Anthropic from "@anthropic-ai/sdk";
 import { PARSING_SYSTEM_PROMPT, buildParsingUserMessage } from "@/lib/parsingPrompt";
+import { extractTextFromUrl } from "@/lib/extractText";
 import { createPaper, createSession, ParsedPaper } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 type Body = {
-  spec_text?: string;
-  paper_text?: string;
-  mark_scheme_text?: string;
+  spec_blob_url?: string;
+  paper_blob_url?: string;
+  mark_scheme_blob_url?: string;
   total_minutes?: number;
   user_name?: string | null;
 };
@@ -44,18 +41,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Bad JSON." }, { status: 400 });
   }
 
-  const specText = (body.spec_text ?? "").trim();
-  const paperText = (body.paper_text ?? "").trim();
-  const markSchemeText = (body.mark_scheme_text ?? "").trim();
+  const specUrl = (body.spec_blob_url ?? "").toString().trim();
+  const paperUrl = (body.paper_blob_url ?? "").toString().trim();
+  const markSchemeUrl = (body.mark_scheme_blob_url ?? "").toString().trim();
   const userName = (body.user_name ?? "").toString().trim() || null;
   const totalMinutes =
     typeof body.total_minutes === "number" && body.total_minutes > 0
       ? Math.floor(body.total_minutes)
       : 0;
 
-  if (!specText || !paperText || !markSchemeText) {
+  if (!specUrl || !paperUrl || !markSchemeUrl) {
     return NextResponse.json(
-      { error: "Missing extracted text for spec, paper, or mark scheme." },
+      { error: "Missing uploaded files for spec, paper, or mark scheme." },
       { status: 400 }
     );
   }
@@ -63,6 +60,56 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "Set a total time (in minutes) for the paper." },
       { status: 400 }
+    );
+  }
+
+  const blobUrls = [specUrl, paperUrl, markSchemeUrl];
+  // Always clean up the uploaded blobs before returning — on success or on any
+  // error. The extracted text lives in the database; we never keep originals.
+  async function cleanupBlobs() {
+    await Promise.all(
+      blobUrls.map((url) =>
+        del(url).catch(() => {
+          // best effort — a failed cleanup shouldn't mask the real outcome
+        })
+      )
+    );
+  }
+
+  // Server-side extraction. Fetch each blob and pull text out in Node, where
+  // PDFs/images/Word docs read reliably (the client-side path failed silently
+  // on iPad Safari).
+  let specText: string;
+  let paperText: string;
+  let markSchemeText: string;
+  try {
+    [specText, paperText, markSchemeText] = await Promise.all([
+      extractTextFromUrl(specUrl),
+      extractTextFromUrl(paperUrl),
+      extractTextFromUrl(markSchemeUrl),
+    ]);
+    specText = specText.trim();
+    paperText = paperText.trim();
+    markSchemeText = markSchemeText.trim();
+  } catch {
+    await cleanupBlobs();
+    return NextResponse.json(
+      {
+        error:
+          "We couldn't read one of your files. It might be image-based or password-protected. Try a different file.",
+      },
+      { status: 422 }
+    );
+  }
+
+  if (!specText || !paperText || !markSchemeText) {
+    await cleanupBlobs();
+    return NextResponse.json(
+      {
+        error:
+          "We couldn't read one of your files. It might be image-based or password-protected. Try a different file.",
+      },
+      { status: 422 }
     );
   }
 
@@ -96,14 +143,24 @@ export async function POST(req: NextRequest) {
       .join("")
       .trim();
     parsed = extractJson(out) as ParsedPaper;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: `Could not parse the paper: ${message}` }, { status: 502 });
+  } catch {
+    await cleanupBlobs();
+    return NextResponse.json(
+      {
+        error:
+          "We couldn't make sense of this paper. Check that all three uploads are the right documents.",
+      },
+      { status: 502 }
+    );
   }
 
   if (!parsed || !Array.isArray(parsed.sections) || parsed.sections.length === 0) {
+    await cleanupBlobs();
     return NextResponse.json(
-      { error: "The parser couldn't find any questions in the paper. Try a clearer upload." },
+      {
+        error:
+          "We couldn't make sense of this paper. Check that all three uploads are the right documents.",
+      },
       { status: 502 }
     );
   }
@@ -125,9 +182,14 @@ export async function POST(req: NextRequest) {
       total_minutes: totalMinutes,
     });
   } catch (err) {
+    await cleanupBlobs();
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: `Could not save the session: ${message}` }, { status: 500 });
   }
+
+  // Extraction and parsing succeeded — the text is in the database now, so the
+  // original uploads are no longer needed.
+  await cleanupBlobs();
 
   return NextResponse.json({ session_id: sessionId });
 }

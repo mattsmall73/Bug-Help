@@ -38,10 +38,11 @@ The Help! (study guide) mode works after this step.
 ### 4. Enable Fluid Compute (recommended)
 
 Vercel's default 4.5MB request body cap will bite some flows. Exam Practice
-extracts text in the browser before uploading (so a 10MB PDF is fine), but
-images go via a tiny transcribe endpoint and a >4MB image will still hit the
-cap. Enabling Fluid Compute on Pro raises the per-request limit to ~100MB
-and is one toggle.
+uploads its three files straight to Vercel Blob via signed URLs (see step 6),
+which bypasses the request body cap entirely, then reads and extracts them on
+the server. Enabling Fluid Compute on Pro raises the per-request limit to
+~100MB and is one toggle that still helps the Help! flow and the image
+transcribe endpoint.
 
 1. In Vercel, open the project → **Settings** → **Functions**.
 2. Toggle **Fluid Compute** on.
@@ -67,6 +68,20 @@ Then run the schema once against the new database:
 
 - In the Vercel Storage tab, open the Neon database → **Open in Neon** → SQL editor.
 - Paste the contents of `schema.sql` from this repo and run it.
+
+### 6. Provision Vercel Blob (for Exam Practice uploads)
+
+Exam Practice uploads the three files (spec, paper, mark scheme) to Vercel
+Blob, then the server reads them, extracts the text, and deletes them. The
+originals are never kept past the parse step.
+
+1. In Vercel, open the project → **Storage** tab → **Create Database** → **Blob**.
+2. Connect it to the project. Vercel adds a `BLOB_READ_WRITE_TOKEN` env var
+   automatically.
+3. Redeploy once so the token is available.
+
+The Help! study guide mode does not use Blob — it stays on client-side
+extraction for now.
 
 That's it. The Exam Practice flow is now live.
 

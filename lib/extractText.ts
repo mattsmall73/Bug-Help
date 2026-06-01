@@ -89,6 +89,27 @@ export async function extractFile(file: File): Promise<ExtractionResult> {
   };
 }
 
+// Fetches a file from a (Vercel Blob) URL and extracts its text server-side,
+// reusing the same path as /api/exam/transcribe. The blob's stored
+// content-type plus the filename extension drive type detection in
+// extractFile, so a generic content-type still resolves via the extension.
+export async function extractTextFromUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Could not fetch file (${res.status}).`);
+  }
+  const arrayBuffer = await res.arrayBuffer();
+  const contentType = res.headers.get("content-type") || "";
+  let name = "upload";
+  try {
+    name = decodeURIComponent(new URL(url).pathname.split("/").pop() || name);
+  } catch {
+    // keep fallback name
+  }
+  const file = new File([arrayBuffer], name, { type: contentType });
+  return extractTextOnly(file);
+}
+
 export async function extractTextOnly(file: File, pastedText?: string): Promise<string> {
   const result = await extractFile(file);
   if (result.textNotes.length > 0) {
