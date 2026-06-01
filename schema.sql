@@ -10,6 +10,9 @@ CREATE TABLE IF NOT EXISTS papers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   title TEXT,
+  -- spec_text now holds the examiner's report (retrospective examiner
+  -- commentary on the paper), not a subject specification. The column name is
+  -- kept to avoid a migration; only the document it stores changed.
   spec_text TEXT NOT NULL,
   paper_text TEXT NOT NULL,
   mark_scheme_text TEXT NOT NULL,

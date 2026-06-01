@@ -24,7 +24,7 @@ export default function Page() {
           <div className="chooser-card-mark">Mode two</div>
           <h2>Exam Practice</h2>
           <p className="chooser-card-sub">
-            Upload a past paper, spec, and mark scheme. Sit it with a timer. Submit and get back a
+            Upload a past paper, examiner's report, and mark scheme. Sit it with a timer. Submit and get back a
             marked paper with coaching feedback.
           </p>
           <div className="chooser-card-cta">Start a paper →</div>

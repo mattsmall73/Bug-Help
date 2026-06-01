@@ -8,6 +8,8 @@ import { createPaper, createSession, ParsedPaper } from "@/lib/db";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+// The `spec_*` names below now carry the examiner's report, not a subject
+// specification. The names are kept to avoid churning the API/db contract.
 type Body = {
   spec_blob_url?: string;
   paper_blob_url?: string;
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
 
   if (!specUrl || !paperUrl || !markSchemeUrl) {
     return NextResponse.json(
-      { error: "Missing uploaded files for spec, paper, or mark scheme." },
+      { error: "Missing uploaded files for examiner's report, paper, or mark scheme." },
       { status: 400 }
     );
   }
