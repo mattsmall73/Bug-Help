@@ -4,15 +4,17 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
 
+// The "spec" slot key is kept as an internal name to avoid churning the
+// API/db field names; it now carries the examiner's report, not a spec.
 type Slot = "spec" | "paper" | "mark_scheme";
 
 const SLOTS: Slot[] = ["spec", "paper", "mark_scheme"];
 
 const SLOT_META: Record<Slot, { label: string; sub: string; noun: string }> = {
   spec: {
-    label: "Subject specification",
-    sub: "What's examinable, assessment objectives, level descriptors.",
-    noun: "spec",
+    label: "Examiner's report",
+    sub: "The examiner's commentary on this paper: what strong answers did, common mistakes, what separated top marks.",
+    noun: "examiner's report",
   },
   paper: {
     label: "Past paper",

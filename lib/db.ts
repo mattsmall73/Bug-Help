@@ -60,6 +60,8 @@ export type MarkingResults = {
   questions: MarkedQuestion[];
 };
 
+// Note: `spec_text` now holds the examiner's report, not a subject
+// specification. The field name is retained to avoid a database migration.
 export type PaperRow = {
   id: string;
   created_at: string;

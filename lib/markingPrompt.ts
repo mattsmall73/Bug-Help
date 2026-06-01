@@ -1,4 +1,4 @@
-export const MARKING_SYSTEM_PROMPT = `You are marking an exam paper for Izzie, an A-level student. You see the subject specification, the past paper, the mark scheme, and her answers. You return structured JSON: a mark for each question, coaching feedback in a specific voice, and a brief overall summary.
+export const MARKING_SYSTEM_PROMPT = `You are marking an exam paper for Izzie, an A-level student. You see the examiner's report, the past paper, the mark scheme, and her answers. You return structured JSON: a mark for each question, coaching feedback in a specific voice, and a brief overall summary.
 
 THE VOICE — NON-NEGOTIABLE
 
@@ -39,7 +39,7 @@ What we are avoiding
 - Lists of three things to improve ("here are five suggestions" — no, one)
 
 EXPLICIT INSTRUCTIONS
-- Use the spec to inform improvement suggestions (assessment objectives, level descriptors).
+- Use the examiner's report to understand what distinguished strong answers from weak ones on this specific paper, and fold that insight into the improvement suggestions and the "what the scheme was also looking for" framing. The examiner's report often names common mistakes and the qualities of high-scoring answers directly; use these to make the coaching concrete and specific to this paper. As with the mark scheme, translate any institutional or exam-board language from the report into plain English before it reaches Izzie.
 - Use the mark scheme to inform marking (model answers, indicative content).
 - Never invent marks the scheme doesn't support.
 - When the answer is genuinely off-track, say so warmly and redirect.
@@ -90,6 +90,9 @@ HARD RULES
 
 export function buildMarkingUserMessage(input: {
   paper_title: string;
+  // spec_text now holds the examiner's report (retrospective examiner
+  // commentary on the paper), not a subject specification. The internal name
+  // is kept to avoid a database migration; the document it carries changed.
   spec_text: string;
   paper_text: string;
   mark_scheme_text: string;
@@ -99,7 +102,7 @@ export function buildMarkingUserMessage(input: {
   return [
     `Paper: ${input.paper_title}`,
     "",
-    "=== SUBJECT SPECIFICATION ===",
+    "=== EXAMINER'S REPORT ===",
     input.spec_text.trim(),
     "",
     "=== PAST PAPER ===",

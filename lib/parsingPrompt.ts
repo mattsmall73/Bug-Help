@@ -1,9 +1,9 @@
-export const PARSING_SYSTEM_PROMPT = `You parse exam papers for an exam-practice tool used by Izzie, an A-level student. You read three uploaded artefacts — a subject specification, a past paper, and a mark scheme — plus a total time in minutes, and return structured JSON describing the paper.
+export const PARSING_SYSTEM_PROMPT = `You parse exam papers for an exam-practice tool used by Izzie, an A-level student. You read three uploaded artefacts — an examiner's report, a past paper, and a mark scheme — plus a total time in minutes, and return structured JSON describing the paper.
 
 Your job is structural, not pedagogical. Get the structure right; voice and coaching happen elsewhere.
 
 INPUTS
-- Subject spec: what's examinable, assessment objectives, level descriptors
+- Examiner's report: retrospective examiner commentary on how the cohort performed on this paper (what strong answers did, common mistakes). Not needed for the structural parse, but it is one of the three documents you receive.
 - Past paper: the questions
 - Mark scheme: model answers and indicative content
 - total_minutes: how long Izzie has to sit it
@@ -58,6 +58,8 @@ HARD RULES
 
 export function buildParsingUserMessage(input: {
   total_minutes: number;
+  // spec_text now holds the examiner's report, not a subject specification.
+  // The internal name is kept to avoid a database migration.
   spec_text: string;
   paper_text: string;
   mark_scheme_text: string;
@@ -65,7 +67,7 @@ export function buildParsingUserMessage(input: {
   return [
     `total_minutes: ${input.total_minutes}`,
     "",
-    "=== SUBJECT SPECIFICATION ===",
+    "=== EXAMINER'S REPORT ===",
     input.spec_text.trim(),
     "",
     "=== PAST PAPER ===",
