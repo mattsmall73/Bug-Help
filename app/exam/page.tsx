@@ -2,24 +2,27 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { extractTextFromFile } from "@/lib/clientExtract";
+import { upload } from "@vercel/blob/client";
 
 type Slot = "spec" | "paper" | "mark_scheme";
 
 const SLOTS: Slot[] = ["spec", "paper", "mark_scheme"];
 
-const SLOT_META: Record<Slot, { label: string; sub: string }> = {
+const SLOT_META: Record<Slot, { label: string; sub: string; noun: string }> = {
   spec: {
     label: "Subject specification",
     sub: "What's examinable, assessment objectives, level descriptors.",
+    noun: "spec",
   },
   paper: {
     label: "Past paper",
     sub: "The questions you'll answer.",
+    noun: "paper",
   },
   mark_scheme: {
     label: "Mark scheme",
     sub: "What the examiner is looking for.",
+    noun: "mark scheme",
   },
 };
 
@@ -28,8 +31,8 @@ const ACCEPT = ".pdf,.docx,.png,.jpg,.jpeg,.gif,.webp,.txt";
 type SlotState =
   | { kind: "empty" }
   | { kind: "attached"; file: File }
-  | { kind: "extracting"; file: File; message: string }
-  | { kind: "ready"; file: File; text: string }
+  | { kind: "uploading"; file: File; message: string }
+  | { kind: "uploaded"; file: File; url: string }
   | { kind: "error"; file: File; message: string };
 
 export default function Page() {
@@ -103,33 +106,31 @@ export default function Page() {
     setPreset(null);
   }
 
-  async function extractOne(slot: Slot): Promise<string | null> {
+  async function uploadOne(slot: Slot): Promise<string | null> {
     const current = slots[slot];
     if (current.kind === "empty") return null;
-    if (current.kind === "ready") return current.text;
+    if (current.kind === "uploaded") return current.url;
     const file = current.file;
 
-    setSlots((prev) => ({
-      ...prev,
-      [slot]: { kind: "extracting", file, message: `Reading ${SLOT_META[slot].label.toLowerCase()}...` },
-    }));
+    const base = `Uploading ${SLOT_META[slot].noun}...`;
+    setSlots((prev) => ({ ...prev, [slot]: { kind: "uploading", file, message: base } }));
 
     try {
-      const text = await extractTextFromFile(file, (message) => {
-        setSlots((prev) => {
-          const s = prev[slot];
-          if (s.kind !== "extracting") return prev;
-          return { ...prev, [slot]: { ...s, message } };
-        });
+      const blob = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/exam/upload-url",
+        onUploadProgress: ({ percentage }) => {
+          setSlots((prev) => {
+            const s = prev[slot];
+            if (s.kind !== "uploading") return prev;
+            return { ...prev, [slot]: { ...s, message: `${base} ${Math.round(percentage)}%` } };
+          });
+        },
       });
-      if (!text.trim()) {
-        throw new Error("Came back empty.");
-      }
-      setSlots((prev) => ({ ...prev, [slot]: { kind: "ready", file, text } }));
-      return text;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not extract.";
-      setSlots((prev) => ({ ...prev, [slot]: { kind: "error", file, message } }));
+      setSlots((prev) => ({ ...prev, [slot]: { kind: "uploaded", file, url: blob.url } }));
+      return blob.url;
+    } catch {
+      setSlots((prev) => ({ ...prev, [slot]: { kind: "error", file, message: "Upload failed." } }));
       return null;
     }
   }
@@ -138,17 +139,17 @@ export default function Page() {
     if (!canStart) return;
     setSubmitting(true);
     setError("");
-    setSubmitMessage("Reading your files...");
+    setSubmitMessage("Uploading your files...");
 
-    const texts: Partial<Record<Slot, string>> = {};
+    const urls: Partial<Record<Slot, string>> = {};
     for (const slot of SLOTS) {
-      const text = await extractOne(slot);
-      if (text === null) {
-        setError(`Couldn't read ${SLOT_META[slot].label.toLowerCase()}. Try a different file or paste the text instead.`);
+      const url = await uploadOne(slot);
+      if (url === null) {
+        setError("We couldn't upload the file. Try again, or check the file isn't corrupted.");
         setSubmitting(false);
         return;
       }
-      texts[slot] = text;
+      urls[slot] = url;
     }
 
     setSubmitMessage("Parsing the paper...");
@@ -158,14 +159,21 @@ export default function Page() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          spec_text: texts.spec,
-          paper_text: texts.paper,
-          mark_scheme_text: texts.mark_scheme,
+          spec_blob_url: urls.spec,
+          paper_blob_url: urls.paper,
+          mark_scheme_blob_url: urls.mark_scheme,
           total_minutes: totalMinutes,
           user_name: userName.trim() || null,
         }),
       });
-      const json = await res.json();
+      let json: { session_id?: string; error?: string };
+      try {
+        json = await res.json();
+      } catch {
+        setError("Something went wrong. Try again.");
+        setSubmitting(false);
+        return;
+      }
       if (!res.ok) {
         setError(json.error || "Something went wrong.");
         setSubmitting(false);
@@ -192,9 +200,9 @@ export default function Page() {
         return { text: "Tap to choose a file or drop it here", tone: "muted" };
       case "attached":
         return { text: `${s.file.name} · ${formatSize(s.file.size)}`, tone: "accent" };
-      case "extracting":
+      case "uploading":
         return { text: `${s.file.name} · ${s.message}`, tone: "accent" };
-      case "ready":
+      case "uploaded":
         return { text: `${s.file.name} · ready`, tone: "done" };
       case "error":
         return { text: `${s.file.name} · ${s.message}`, tone: "error" };
@@ -303,7 +311,7 @@ export default function Page() {
             })}
 
             <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 10, fontStyle: "italic" }}>
-              PDFs, Word docs, plain text, or images. Reading happens in your browser so big PDFs don&apos;t hit upload limits.
+              PDFs, Word docs, plain text, or images. Files upload securely and are read on the server, so big PDFs work fine on any device.
             </div>
           </div>
 
