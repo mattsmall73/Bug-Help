@@ -1,11 +1,14 @@
 # Help!
 
-A web app for Izzie with two modes:
+A web app for Izzie with three modes:
 
 - **Help!** (study guide) — drop in a worksheet or essay brief, get back a sequenced study guide with timers, breaks, and a clear stopping point.
 - **Exam Practice** — upload a past paper, spec, and mark scheme. Sit the paper with a timer. Submit, and get back a marked paper with coaching feedback in the Help! voice.
+- **Coach** — a conversational tutor. Talk through *how* to approach the work: how to annotate a passage, how to structure an essay, how to start. It teaches with her real work but never does it for her: it points, she does the thinking.
 
-The home page at `/` is a chooser. The two modes share the brand, the engine, the aesthetic, and the voice. They are different jobs.
+The home page at `/` is a chooser. The three modes share the brand, the engine, the aesthetic, and the voice. They are different jobs.
+
+The defining distinction for Coach: it is a **tutor, not a marker**. Exam Practice is the exam (graded, against the scheme). Coach is the person beside her while she learns. It leads with questions and pointers, holds the line warmly when she asks it to "just write it for me," and uses a mark scheme conversationally ("the scheme wants you to evaluate, where are you doing that?") rather than handing over points to copy.
 
 ---
 
@@ -105,7 +108,7 @@ Open <http://localhost:3000>.
 
 ### Top-level
 
-- `app/page.tsx` — home chooser. Two cards: Help! and Exam Practice.
+- `app/page.tsx` — home chooser. Three cards: Help!, Exam Practice, Coach.
 - `app/layout.tsx` — site frame, fonts, title.
 - `app/globals.css` — shared styling (warm-paper look).
 
@@ -132,9 +135,16 @@ Open <http://localhost:3000>.
 - `lib/db.ts` — Neon client and query helpers.
 - `schema.sql` — database schema. Run once after provisioning.
 
+### Coach (conversational tutor)
+
+- `app/coach/page.tsx` — the chat UI. An optional "bring your work" panel (paste or upload a passage, essay, or mark scheme), a message thread, and a typing indicator. The conversation and any loaded work persist in localStorage so a refresh never loses her place. The opening greeting is fixed, family-authored copy; everything after it is generated.
+- `app/api/coach/route.ts` — the chat endpoint. Takes JSON `{messages, material, fileNames}` and returns the next tutor turn. Her material is re-folded into the first user turn each request, so the tutor always sees the current version even if she pastes the passage in mid-conversation.
+- `app/api/coach/extract/route.ts` — turns one attached file into plain text (reusing `lib/extractText.ts`), so chat turns stay cheap JSON.
+- `lib/coachPrompt.ts` — the tutor system prompt. This is the soul of the module: Socratic, teaches *with* her work and never *does* it, holds the line warmly when she asks it to just write the answer, and calibrates to what she actually knows. Treat changes as deliberate prompt-iteration cycles, same as the marking voice.
+
 ### Shared
 
-- `lib/extractText.ts` — extracts plain text from PDFs, images, Word, or text uploads. Used by Exam Practice for parsing/marking; the Help! flow uses its own extraction inline.
+- `lib/extractText.ts` — extracts plain text from PDFs, images, Word, or text uploads. Used by Exam Practice for parsing/marking and by Coach for attached work; the Help! flow uses its own extraction inline.
 
 ---
 
