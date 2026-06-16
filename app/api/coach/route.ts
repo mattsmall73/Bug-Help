@@ -12,21 +12,12 @@ type Body = {
   attachments?: unknown;
 };
 
-type ImageMediaType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
-const ALLOWED_IMAGE_TYPES: ImageMediaType[] = [
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-];
-
-// Visual attachments: images and PDFs. Both are sent to the model as-is so it
-// can SEE her annotations (highlights, underlines, margin notes), rather than a
-// transcript with the marks stripped out. Images become image blocks; PDFs
-// become document blocks, which Claude reads page by page, visually.
-type CoachAttachment =
-  | { kind: "image"; mediaType: ImageMediaType; data: string }
-  | { kind: "pdf"; data: string };
+// Visual attachments: images and PDFs. Both are uploaded to Vercel Blob by the
+// browser and referenced here by URL, so the model can SEE her annotations
+// (highlights, underlines, margin notes) without us inlining megabytes of
+// base64 into every request. Images become image blocks; PDFs become document
+// blocks, which Claude reads page by page, visually.
+type CoachAttachment = { kind: "image" | "pdf"; url: string };
 
 function isMessage(m: unknown): m is CoachMessage {
   return (
@@ -39,19 +30,9 @@ function isMessage(m: unknown): m is CoachMessage {
 
 function toAttachment(x: unknown): CoachAttachment | null {
   if (typeof x !== "object" || x === null) return null;
-  const { kind, mediaType, data } = x as {
-    kind?: unknown;
-    mediaType?: unknown;
-    data?: unknown;
-  };
-  if (typeof data !== "string" || data.length === 0) return null;
-  if (kind === "pdf") {
-    return { kind: "pdf", data };
-  }
-  const type = ALLOWED_IMAGE_TYPES.includes(mediaType as ImageMediaType)
-    ? (mediaType as ImageMediaType)
-    : "image/png";
-  return { kind: "image", mediaType: type, data };
+  const { kind, url } = x as { kind?: unknown; url?: unknown };
+  if (typeof url !== "string" || !/^https:\/\//.test(url)) return null;
+  return { kind: kind === "pdf" ? "pdf" : "image", url };
 }
 
 export async function POST(req: NextRequest) {
@@ -104,15 +85,11 @@ export async function POST(req: NextRequest) {
         att.kind === "pdf"
           ? {
               type: "document" as const,
-              source: {
-                type: "base64" as const,
-                media_type: "application/pdf" as const,
-                data: att.data,
-              },
+              source: { type: "url" as const, url: att.url },
             }
           : {
               type: "image" as const,
-              source: { type: "base64" as const, media_type: att.mediaType, data: att.data },
+              source: { type: "url" as const, url: att.url },
             }
       );
       apiMessages[firstUserIdx] = {

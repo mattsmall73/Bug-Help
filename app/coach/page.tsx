@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { upload } from "@vercel/blob/client";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -14,10 +15,11 @@ const OPENING: Msg = {
     "Hi Izzie. I'm here to think things through with you, not to do them for you. Tell me what you're stuck on, or bring a passage or an essay and we'll start from there. Annotation and structure are the two I'm best at.",
 };
 
-// Visual work she shows the tutor: images and PDFs. Both are kept as-is (held
-// as a data URL) and sent to the model so it can see her annotations, rather
-// than flattened to a transcript that drops every mark she made.
-type Attachment = { name: string; dataUrl: string; kind: "image" | "pdf" };
+// Visual work she shows the tutor: images and PDFs. Each is uploaded to Vercel
+// Blob and referenced by URL, so the model can see her annotations directly
+// rather than a transcript that drops every mark she made, and so big files
+// never hit the request body cap.
+type Attachment = { name: string; url: string; kind: "image" | "pdf" };
 type Stored = {
   messages: Msg[];
   material: string;
@@ -66,14 +68,7 @@ export default function Page() {
     const payload: Stored = { messages, material, fileNames, attachments };
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(payload));
-    } catch {
-      // Photos and PDFs can push past the localStorage quota. Keep her
-      // conversation and text material persisted even when the files are too
-      // big to store between visits.
-      try {
-        localStorage.setItem(STORE_KEY, JSON.stringify({ ...payload, attachments: [] }));
-      } catch {}
-    }
+    } catch {}
   }, [messages, material, fileNames, attachments]);
 
   useEffect(() => {
@@ -96,7 +91,7 @@ export default function Page() {
           messages: history.slice(start),
           material,
           fileNames,
-          attachments: attachments.map(toAttachmentPayload).filter(Boolean),
+          attachments: attachments.map((a) => ({ kind: a.kind, url: a.url })),
         }),
       });
       const json = await res.json();
@@ -134,16 +129,25 @@ export default function Page() {
       const isPdf = file.type === "application/pdf" || PDF_RE.test(file.name);
       if (isImage || isPdf) {
         // Images and PDFs are kept whole so the tutor can SEE her annotations.
-        // No transcription: read to a data URL and hold it client-side; the
-        // model receives the file itself (image block or document block).
+        // Upload straight to Blob (bypassing the request body cap) and hold the
+        // URL; the model receives the file itself (image block or document
+        // block) by URL each turn.
+        setExtracting(true);
         try {
-          const dataUrl = await readDataUrl(file);
+          const blob = await upload(file.name, file, {
+            access: "public",
+            handleUploadUrl: "/api/coach/upload-url",
+          });
           setAttachments((prev) => [
             ...prev,
-            { name: file.name, dataUrl, kind: isImage ? "image" : "pdf" },
+            { name: file.name, url: blob.url, kind: isImage ? "image" : "pdf" },
           ]);
         } catch {
-          setErrorMsg(`Could not read ${file.name}.`);
+          setErrorMsg(
+            `Could not upload ${file.name}. Try again, or paste the text instead.`
+          );
+        } finally {
+          setExtracting(false);
         }
         continue;
       }
@@ -252,7 +256,7 @@ export default function Page() {
               />
             </div>
 
-            {extracting && <div className="coach-extracting">Reading that in...</div>}
+            {extracting && <div className="coach-extracting">Loading that in...</div>}
 
             {fileNames.length > 0 && (
               <div className="coach-chips">
@@ -270,7 +274,7 @@ export default function Page() {
                   <div className="coach-thumb" key={`${att.name}-${i}`}>
                     {att.kind === "image" ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={att.dataUrl} alt={att.name} />
+                      <img src={att.url} alt={att.name} />
                     ) : (
                       <div className="coach-thumb-pdf">
                         <span className="coach-thumb-pdf-tag">PDF</span>
@@ -364,26 +368,6 @@ export default function Page() {
       </div>
     </div>
   );
-}
-
-function readDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-// Splits a data URL (data:image/png;base64,AAAA...) into the pieces the API
-// wants, tagged with its kind. Returns null for anything that isn't a base64
-// data URL.
-function toAttachmentPayload(
-  att: Attachment
-): { kind: "image" | "pdf"; mediaType: string; data: string } | null {
-  const match = att.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) return null;
-  return { kind: att.kind, mediaType: match[1], data: match[2] };
 }
 
 function workSummary(
