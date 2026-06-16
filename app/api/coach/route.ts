@@ -9,7 +9,7 @@ type Body = {
   messages?: unknown;
   material?: unknown;
   fileNames?: unknown;
-  images?: unknown;
+  attachments?: unknown;
 };
 
 type ImageMediaType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
@@ -20,7 +20,13 @@ const ALLOWED_IMAGE_TYPES: ImageMediaType[] = [
   "image/webp",
 ];
 
-type CoachImage = { mediaType: ImageMediaType; data: string };
+// Visual attachments: images and PDFs. Both are sent to the model as-is so it
+// can SEE her annotations (highlights, underlines, margin notes), rather than a
+// transcript with the marks stripped out. Images become image blocks; PDFs
+// become document blocks, which Claude reads page by page, visually.
+type CoachAttachment =
+  | { kind: "image"; mediaType: ImageMediaType; data: string }
+  | { kind: "pdf"; data: string };
 
 function isMessage(m: unknown): m is CoachMessage {
   return (
@@ -31,14 +37,21 @@ function isMessage(m: unknown): m is CoachMessage {
   );
 }
 
-function toImage(x: unknown): CoachImage | null {
+function toAttachment(x: unknown): CoachAttachment | null {
   if (typeof x !== "object" || x === null) return null;
-  const { mediaType, data } = x as { mediaType?: unknown; data?: unknown };
+  const { kind, mediaType, data } = x as {
+    kind?: unknown;
+    mediaType?: unknown;
+    data?: unknown;
+  };
   if (typeof data !== "string" || data.length === 0) return null;
+  if (kind === "pdf") {
+    return { kind: "pdf", data };
+  }
   const type = ALLOWED_IMAGE_TYPES.includes(mediaType as ImageMediaType)
     ? (mediaType as ImageMediaType)
     : "image/png";
-  return { mediaType: type, data };
+  return { kind: "image", mediaType: type, data };
 }
 
 export async function POST(req: NextRequest) {
@@ -62,8 +75,8 @@ export async function POST(req: NextRequest) {
   const fileNames = Array.isArray(body.fileNames)
     ? body.fileNames.filter((n): n is string => typeof n === "string")
     : [];
-  const images = Array.isArray(body.images)
-    ? body.images.map(toImage).filter((x): x is CoachImage => x !== null)
+  const attachments = Array.isArray(body.attachments)
+    ? body.attachments.map(toAttachment).filter((x): x is CoachAttachment => x !== null)
     : [];
 
   if (messages.length === 0 || messages[messages.length - 1].role !== "user") {
@@ -75,29 +88,41 @@ export async function POST(req: NextRequest) {
 
   const finalMessages = buildCoachMessages(messages, material, fileNames);
 
-  // Text content per turn. Any images she has shown are attached to the first
-  // user turn as vision blocks, alongside the folded text material, so the
+  // Text content per turn. Any visual work she has shown (images or PDFs) is
+  // attached to the first user turn alongside the folded text material, so the
   // tutor can actually see her annotations rather than a flattened transcript.
   const apiMessages: Anthropic.MessageParam[] = finalMessages.map((m) => ({
     role: m.role,
     content: m.content,
   }));
 
-  if (images.length > 0) {
+  if (attachments.length > 0) {
     const firstUserIdx = apiMessages.findIndex((m) => m.role === "user");
     if (firstUserIdx !== -1) {
       const folded = apiMessages[firstUserIdx].content as string;
+      const attachmentBlocks = attachments.map((att) =>
+        att.kind === "pdf"
+          ? {
+              type: "document" as const,
+              source: {
+                type: "base64" as const,
+                media_type: "application/pdf" as const,
+                data: att.data,
+              },
+            }
+          : {
+              type: "image" as const,
+              source: { type: "base64" as const, media_type: att.mediaType, data: att.data },
+            }
+      );
       apiMessages[firstUserIdx] = {
         role: "user",
         content: [
           {
             type: "text",
-            text: "Some of my work is attached below as images. These are photos of my own pages, often with my annotations on them (underlines, circles, margin notes). Look at them and use them to advise me on how to annotate better. Do not grade them.",
+            text: "Some of my work is attached below, as images or PDFs. These are my own pages, often with my annotations on them (highlights, underlines, circles, margin notes). Look at them and use them to advise me on how to annotate better. Do not grade them.",
           },
-          ...images.map((img) => ({
-            type: "image" as const,
-            source: { type: "base64" as const, media_type: img.mediaType, data: img.data },
-          })),
+          ...attachmentBlocks,
           { type: "text" as const, text: folded },
         ],
       };

@@ -14,16 +14,25 @@ const OPENING: Msg = {
     "Hi Izzie. I'm here to think things through with you, not to do them for you. Tell me what you're stuck on, or bring a passage or an essay and we'll start from there. Annotation and structure are the two I'm best at.",
 };
 
-type CoachImage = { name: string; dataUrl: string };
-type Stored = { messages: Msg[]; material: string; fileNames: string[]; images: CoachImage[] };
+// Visual work she shows the tutor: images and PDFs. Both are kept as-is (held
+// as a data URL) and sent to the model so it can see her annotations, rather
+// than flattened to a transcript that drops every mark she made.
+type Attachment = { name: string; dataUrl: string; kind: "image" | "pdf" };
+type Stored = {
+  messages: Msg[];
+  material: string;
+  fileNames: string[];
+  attachments: Attachment[];
+};
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp)$/i;
+const PDF_RE = /\.pdf$/i;
 
 export default function Page() {
   const [messages, setMessages] = useState<Msg[]>([OPENING]);
   const [material, setMaterial] = useState("");
   const [fileNames, setFileNames] = useState<string[]>([]);
-  const [images, setImages] = useState<CoachImage[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -46,7 +55,7 @@ export default function Page() {
         }
         if (typeof parsed.material === "string") setMaterial(parsed.material);
         if (Array.isArray(parsed.fileNames)) setFileNames(parsed.fileNames);
-        if (Array.isArray(parsed.images)) setImages(parsed.images);
+        if (Array.isArray(parsed.attachments)) setAttachments(parsed.attachments);
       }
     } catch {}
     loaded.current = true;
@@ -54,17 +63,18 @@ export default function Page() {
 
   useEffect(() => {
     if (!loaded.current) return;
-    const payload: Stored = { messages, material, fileNames, images };
+    const payload: Stored = { messages, material, fileNames, attachments };
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(payload));
     } catch {
-      // Images can push past the localStorage quota. Keep her conversation and
-      // text material persisted even if the photos are too big to store.
+      // Photos and PDFs can push past the localStorage quota. Keep her
+      // conversation and text material persisted even when the files are too
+      // big to store between visits.
       try {
-        localStorage.setItem(STORE_KEY, JSON.stringify({ ...payload, images: [] }));
+        localStorage.setItem(STORE_KEY, JSON.stringify({ ...payload, attachments: [] }));
       } catch {}
     }
-  }, [messages, material, fileNames, images]);
+  }, [messages, material, fileNames, attachments]);
 
   useEffect(() => {
     const el = threadRef.current;
@@ -86,7 +96,7 @@ export default function Page() {
           messages: history.slice(start),
           material,
           fileNames,
-          images: images.map(toImagePayload).filter(Boolean),
+          attachments: attachments.map(toAttachmentPayload).filter(Boolean),
         }),
       });
       const json = await res.json();
@@ -121,18 +131,23 @@ export default function Page() {
     setErrorMsg("");
     for (const file of files) {
       const isImage = file.type.startsWith("image/") || IMAGE_RE.test(file.name);
-      if (isImage) {
-        // Images are kept as images so the tutor can see her annotations.
-        // No transcription: read the file to a data URL and hold it client-side.
+      const isPdf = file.type === "application/pdf" || PDF_RE.test(file.name);
+      if (isImage || isPdf) {
+        // Images and PDFs are kept whole so the tutor can SEE her annotations.
+        // No transcription: read to a data URL and hold it client-side; the
+        // model receives the file itself (image block or document block).
         try {
           const dataUrl = await readDataUrl(file);
-          setImages((prev) => [...prev, { name: file.name, dataUrl }]);
+          setAttachments((prev) => [
+            ...prev,
+            { name: file.name, dataUrl, kind: isImage ? "image" : "pdf" },
+          ]);
         } catch {
           setErrorMsg(`Could not read ${file.name}.`);
         }
         continue;
       }
-      // Text-bearing files (PDF, Word, plain text) still flatten to text.
+      // Word and plain text have no visual layer worth keeping; flatten to text.
       setExtracting(true);
       try {
         const fd = new FormData();
@@ -154,14 +169,14 @@ export default function Page() {
     }
   }
 
-  function removeImage(i: number) {
-    setImages((prev) => prev.filter((_, idx) => idx !== i));
+  function removeAttachment(i: number) {
+    setAttachments((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   function clearWork() {
     setMaterial("");
     setFileNames([]);
-    setImages([]);
+    setAttachments([]);
   }
 
   function startFresh() {
@@ -169,7 +184,7 @@ export default function Page() {
     setMessages([OPENING]);
     setMaterial("");
     setFileNames([]);
-    setImages([]);
+    setAttachments([]);
     setInput("");
     setErrorMsg("");
     try {
@@ -178,7 +193,7 @@ export default function Page() {
   }
 
   const hasMaterial =
-    material.trim().length > 0 || fileNames.length > 0 || images.length > 0;
+    material.trim().length > 0 || fileNames.length > 0 || attachments.length > 0;
   const lastIsUser = messages.length > 0 && messages[messages.length - 1].role === "user";
 
   return (
@@ -200,7 +215,7 @@ export default function Page() {
 
         {hasMaterial && !showWork && (
           <div className="coach-work-summary">
-            {workSummary(fileNames, images, material)} · we'll work from this
+            {workSummary(fileNames, attachments, material)} · we'll work from this
           </div>
         )}
 
@@ -208,8 +223,8 @@ export default function Page() {
           <div className="coach-work-body">
             <p className="coach-work-intro">
               A passage to annotate, an essay you're shaping, a mark scheme to work against.
-              Or a photo of a page you've already marked up, and I'll help you annotate
-              sharper next time. Paste it or drop a file. I'll point at it. The pen stays yours.
+              Or a PDF or photo of a page you've already marked up, and I'll look at your
+              annotations and help you sharpen them. Paste it or drop a file. The pen stays yours.
             </p>
 
             <div
@@ -249,16 +264,23 @@ export default function Page() {
               </div>
             )}
 
-            {images.length > 0 && (
+            {attachments.length > 0 && (
               <div className="coach-thumbs">
-                {images.map((img, i) => (
-                  <div className="coach-thumb" key={`${img.name}-${i}`}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={img.dataUrl} alt={img.name} />
+                {attachments.map((att, i) => (
+                  <div className="coach-thumb" key={`${att.name}-${i}`}>
+                    {att.kind === "image" ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={att.dataUrl} alt={att.name} />
+                    ) : (
+                      <div className="coach-thumb-pdf">
+                        <span className="coach-thumb-pdf-tag">PDF</span>
+                        <span className="coach-thumb-pdf-name">{att.name}</span>
+                      </div>
+                    )}
                     <button
                       className="coach-thumb-remove"
-                      onClick={() => removeImage(i)}
-                      aria-label={`Remove ${img.name}`}
+                      onClick={() => removeAttachment(i)}
+                      aria-label={`Remove ${att.name}`}
                     >
                       ×
                     </button>
@@ -354,19 +376,27 @@ function readDataUrl(file: File): Promise<string> {
 }
 
 // Splits a data URL (data:image/png;base64,AAAA...) into the pieces the API
-// wants. Returns null for anything that isn't a base64 image data URL.
-function toImagePayload(img: CoachImage): { mediaType: string; data: string } | null {
-  const match = img.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+// wants, tagged with its kind. Returns null for anything that isn't a base64
+// data URL.
+function toAttachmentPayload(
+  att: Attachment
+): { kind: "image" | "pdf"; mediaType: string; data: string } | null {
+  const match = att.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return null;
-  return { mediaType: match[1], data: match[2] };
+  return { kind: att.kind, mediaType: match[1], data: match[2] };
 }
 
-function workSummary(fileNames: string[], images: CoachImage[], material: string): string {
+function workSummary(
+  fileNames: string[],
+  attachments: Attachment[],
+  material: string
+): string {
   const parts: string[] = [];
   if (fileNames.length > 0) parts.push(fileNames.join(", "));
-  if (images.length > 0) {
-    parts.push(`${images.length} ${images.length === 1 ? "image" : "images"}`);
-  }
+  const images = attachments.filter((a) => a.kind === "image").length;
+  const pdfs = attachments.filter((a) => a.kind === "pdf").length;
+  if (images > 0) parts.push(`${images} ${images === 1 ? "image" : "images"}`);
+  if (pdfs > 0) parts.push(`${pdfs} PDF${pdfs === 1 ? "" : "s"}`);
   if (parts.length === 0 && material.trim().length > 0) parts.push("pasted text");
   return parts.join(" · ") || "your work";
 }
