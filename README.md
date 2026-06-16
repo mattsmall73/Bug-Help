@@ -138,8 +138,10 @@ Open <http://localhost:3000>.
 ### Coach (conversational tutor)
 
 - `app/coach/page.tsx` — the chat UI. An optional "bring your work" panel (paste or upload a passage, essay, or mark scheme), a message thread, and a typing indicator. The conversation and any loaded work persist in localStorage so a refresh never loses her place. The opening greeting is fixed, family-authored copy; everything after it is generated.
-- `app/api/coach/route.ts` — the chat endpoint. Takes JSON `{messages, material, fileNames}` and returns the next tutor turn. Her material is re-folded into the first user turn each request, so the tutor always sees the current version even if she pastes the passage in mid-conversation.
-- `app/api/coach/extract/route.ts` — turns one attached file into plain text (reusing `lib/extractText.ts`), so chat turns stay cheap JSON.
+- `app/api/coach/route.ts` — the chat endpoint. Takes JSON `{messages, material, fileNames, images}` and returns the next tutor turn. Her text material is re-folded into the first user turn each request, and any images she has shown are attached there as vision blocks, so the tutor always sees the current version even if she adds work mid-conversation.
+- `app/api/coach/extract/route.ts` — turns one attached *text-bearing* file (PDF, Word, plain text) into plain text (reusing `lib/extractText.ts`), so chat turns stay cheap JSON. Images skip this path entirely (see below).
+
+**Images vs text.** Text-bearing files are flattened to text via the extract endpoint. Images are not: they are kept as images (read to a data URL client-side, held in state, persisted in localStorage subject to quota) and passed to the chat model as vision. This is what lets Izzie photograph a page she has already annotated and get advice on how to annotate better, rather than a transcript with all her marks stripped out. The tutor coaches from the image; it never grades it.
 - `lib/coachPrompt.ts` — the tutor system prompt. This is the soul of the module: Socratic, teaches *with* her work and never *does* it, holds the line warmly when she asks it to just write the answer, and calibrates to what she actually knows. Treat changes as deliberate prompt-iteration cycles, same as the marking voice.
 
 ### Shared

@@ -14,12 +14,16 @@ const OPENING: Msg = {
     "Hi Izzie. I'm here to think things through with you, not to do them for you. Tell me what you're stuck on, or bring a passage or an essay and we'll start from there. Annotation and structure are the two I'm best at.",
 };
 
-type Stored = { messages: Msg[]; material: string; fileNames: string[] };
+type CoachImage = { name: string; dataUrl: string };
+type Stored = { messages: Msg[]; material: string; fileNames: string[]; images: CoachImage[] };
+
+const IMAGE_RE = /\.(png|jpe?g|gif|webp)$/i;
 
 export default function Page() {
   const [messages, setMessages] = useState<Msg[]>([OPENING]);
   const [material, setMaterial] = useState("");
   const [fileNames, setFileNames] = useState<string[]>([]);
+  const [images, setImages] = useState<CoachImage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -42,6 +46,7 @@ export default function Page() {
         }
         if (typeof parsed.material === "string") setMaterial(parsed.material);
         if (Array.isArray(parsed.fileNames)) setFileNames(parsed.fileNames);
+        if (Array.isArray(parsed.images)) setImages(parsed.images);
       }
     } catch {}
     loaded.current = true;
@@ -49,11 +54,17 @@ export default function Page() {
 
   useEffect(() => {
     if (!loaded.current) return;
+    const payload: Stored = { messages, material, fileNames, images };
     try {
-      const payload: Stored = { messages, material, fileNames };
       localStorage.setItem(STORE_KEY, JSON.stringify(payload));
-    } catch {}
-  }, [messages, material, fileNames]);
+    } catch {
+      // Images can push past the localStorage quota. Keep her conversation and
+      // text material persisted even if the photos are too big to store.
+      try {
+        localStorage.setItem(STORE_KEY, JSON.stringify({ ...payload, images: [] }));
+      } catch {}
+    }
+  }, [messages, material, fileNames, images]);
 
   useEffect(() => {
     const el = threadRef.current;
@@ -75,6 +86,7 @@ export default function Page() {
           messages: history.slice(start),
           material,
           fileNames,
+          images: images.map(toImagePayload).filter(Boolean),
         }),
       });
       const json = await res.json();
@@ -106,9 +118,22 @@ export default function Page() {
 
   async function addFiles(files: File[]) {
     if (files.length === 0) return;
-    setExtracting(true);
     setErrorMsg("");
     for (const file of files) {
+      const isImage = file.type.startsWith("image/") || IMAGE_RE.test(file.name);
+      if (isImage) {
+        // Images are kept as images so the tutor can see her annotations.
+        // No transcription: read the file to a data URL and hold it client-side.
+        try {
+          const dataUrl = await readDataUrl(file);
+          setImages((prev) => [...prev, { name: file.name, dataUrl }]);
+        } catch {
+          setErrorMsg(`Could not read ${file.name}.`);
+        }
+        continue;
+      }
+      // Text-bearing files (PDF, Word, plain text) still flatten to text.
+      setExtracting(true);
       try {
         const fd = new FormData();
         fd.append("file", file);
@@ -123,14 +148,20 @@ export default function Page() {
         setFileNames((prev) => [...prev, file.name]);
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : `Could not read ${file.name}.`);
+      } finally {
+        setExtracting(false);
       }
     }
-    setExtracting(false);
+  }
+
+  function removeImage(i: number) {
+    setImages((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   function clearWork() {
     setMaterial("");
     setFileNames([]);
+    setImages([]);
   }
 
   function startFresh() {
@@ -138,6 +169,7 @@ export default function Page() {
     setMessages([OPENING]);
     setMaterial("");
     setFileNames([]);
+    setImages([]);
     setInput("");
     setErrorMsg("");
     try {
@@ -145,7 +177,8 @@ export default function Page() {
     } catch {}
   }
 
-  const hasMaterial = material.trim().length > 0 || fileNames.length > 0;
+  const hasMaterial =
+    material.trim().length > 0 || fileNames.length > 0 || images.length > 0;
   const lastIsUser = messages.length > 0 && messages[messages.length - 1].role === "user";
 
   return (
@@ -167,7 +200,7 @@ export default function Page() {
 
         {hasMaterial && !showWork && (
           <div className="coach-work-summary">
-            {fileNames.length > 0 ? fileNames.join(", ") : "pasted text"} · we'll work from this
+            {workSummary(fileNames, images, material)} · we'll work from this
           </div>
         )}
 
@@ -175,7 +208,8 @@ export default function Page() {
           <div className="coach-work-body">
             <p className="coach-work-intro">
               A passage to annotate, an essay you're shaping, a mark scheme to work against.
-              Paste it or drop a file. I'll point at it. The pen stays yours.
+              Or a photo of a page you've already marked up, and I'll help you annotate
+              sharper next time. Paste it or drop a file. I'll point at it. The pen stays yours.
             </p>
 
             <div
@@ -211,6 +245,24 @@ export default function Page() {
                   <span className="coach-chip" key={`${n}-${i}`}>
                     {n}
                   </span>
+                ))}
+              </div>
+            )}
+
+            {images.length > 0 && (
+              <div className="coach-thumbs">
+                {images.map((img, i) => (
+                  <div className="coach-thumb" key={`${img.name}-${i}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img.dataUrl} alt={img.name} />
+                    <button
+                      className="coach-thumb-remove"
+                      onClick={() => removeImage(i)}
+                      aria-label={`Remove ${img.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -290,6 +342,33 @@ export default function Page() {
       </div>
     </div>
   );
+}
+
+function readDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+// Splits a data URL (data:image/png;base64,AAAA...) into the pieces the API
+// wants. Returns null for anything that isn't a base64 image data URL.
+function toImagePayload(img: CoachImage): { mediaType: string; data: string } | null {
+  const match = img.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  return { mediaType: match[1], data: match[2] };
+}
+
+function workSummary(fileNames: string[], images: CoachImage[], material: string): string {
+  const parts: string[] = [];
+  if (fileNames.length > 0) parts.push(fileNames.join(", "));
+  if (images.length > 0) {
+    parts.push(`${images.length} ${images.length === 1 ? "image" : "images"}`);
+  }
+  if (parts.length === 0 && material.trim().length > 0) parts.push("pasted text");
+  return parts.join(" · ") || "your work";
 }
 
 // A small, safe renderer for the tutor's replies: paragraphs, simple bullet
