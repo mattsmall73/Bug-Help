@@ -29,6 +29,16 @@ export default function Page() {
           </p>
           <div className="chooser-card-cta">Start a paper →</div>
         </Link>
+
+        <Link href="/filer" className="chooser-card">
+          <div className="chooser-card-mark">Mode three</div>
+          <h2>Where does this go?</h2>
+          <p className="chooser-card-sub">
+            Paste something a teacher gave you. Find out where it fits in Politics, what the key idea
+            means, and one way to start thinking about it.
+          </p>
+          <div className="chooser-card-cta">Find its place →</div>
+        </Link>
       </div>
     </div>
   );
