@@ -86,9 +86,10 @@ export async function POST(req: NextRequest) {
     const response = await client.messages.create({
       model: "claude-opus-4-8",
       max_tokens: 1024,
-      // A deliberate low temperature for filing consistency, rather than the SDK
-      // default of 1.0. Not pinned to 0 (that errored and was backed out in Sentiero).
-      temperature: 0.2,
+      // The brief asked for a low temperature for filing consistency, but
+      // claude-opus-4-8 has deprecated the temperature parameter and rejects the
+      // request if it is set. Filing consistency leans on the structured prompt
+      // and the locked JSON contract instead.
       system: buildFilerSystemPrompt(POLITICS),
       messages: [{ role: "user", content: contentBlocks }],
     });
