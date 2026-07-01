@@ -30,8 +30,18 @@ export default function Page() {
           <div className="chooser-card-cta">Start a paper →</div>
         </Link>
 
-        <Link href="/filer" className="chooser-card">
+        <Link href="/coach" className="chooser-card">
           <div className="chooser-card-mark">Mode three</div>
+          <h2>Coach</h2>
+          <p className="chooser-card-sub">
+            Stuck on how to start? Talk it through with a tutor. How to annotate a passage, how to
+            structure an essay. It points, you do the thinking.
+          </p>
+          <div className="chooser-card-cta">Talk it through →</div>
+        </Link>
+
+        <Link href="/filer" className="chooser-card">
+          <div className="chooser-card-mark">Mode four</div>
           <h2>Where does this go?</h2>
           <p className="chooser-card-sub">
             Paste something a teacher gave you. Find out where it fits in Politics, what the key idea

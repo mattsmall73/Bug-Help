@@ -1,11 +1,14 @@
 # Help!
 
-A web app for Izzie with two modes:
+A web app for Izzie with three modes:
 
 - **Help!** (study guide) — drop in a worksheet or essay brief, get back a sequenced study guide with timers, breaks, and a clear stopping point.
 - **Exam Practice** — upload a past paper, spec, and mark scheme. Sit the paper with a timer. Submit, and get back a marked paper with coaching feedback in the Help! voice.
+- **Coach** — a conversational tutor. Talk through *how* to approach the work: how to annotate a passage, how to structure an essay, how to start. It teaches with her real work but never does it for her: it points, she does the thinking.
 
-The home page at `/` is a chooser. The two modes share the brand, the engine, the aesthetic, and the voice. They are different jobs.
+The home page at `/` is a chooser. The three modes share the brand, the engine, the aesthetic, and the voice. They are different jobs.
+
+The defining distinction for Coach: it is a **tutor, not a marker**. Exam Practice is the exam (graded, against the scheme). Coach is the person beside her while she learns. It leads with questions and pointers, holds the line warmly when she asks it to "just write it for me," and uses a mark scheme conversationally ("the scheme wants you to evaluate, where are you doing that?") rather than handing over points to copy.
 
 ---
 
@@ -105,7 +108,7 @@ Open <http://localhost:3000>.
 
 ### Top-level
 
-- `app/page.tsx` — home chooser. Two cards: Help! and Exam Practice.
+- `app/page.tsx` — home chooser. Three cards: Help!, Exam Practice, Coach.
 - `app/layout.tsx` — site frame, fonts, title.
 - `app/globals.css` — shared styling (warm-paper look).
 
@@ -132,9 +135,21 @@ Open <http://localhost:3000>.
 - `lib/db.ts` — Neon client and query helpers.
 - `schema.sql` — database schema. Run once after provisioning.
 
+### Coach (conversational tutor)
+
+- `app/coach/page.tsx` — the chat UI. An optional "bring your work" panel (paste or upload a passage, essay, or mark scheme), a message thread, and a typing indicator. The conversation and any loaded work persist in localStorage so a refresh never loses her place. The opening greeting is fixed, family-authored copy; everything after it is generated.
+- `app/api/coach/route.ts` — the chat endpoint. Takes JSON `{messages, material, fileNames, attachments}` and returns the next tutor turn. Her text material is re-folded into the first user turn each request, and any visual work she has shown (images and PDFs) is attached there as vision blocks (image blocks for images, document blocks for PDFs), referenced by URL, so the tutor always sees the current version even if she adds work mid-conversation.
+- `app/api/coach/upload-url/route.ts` — signs short-lived tokens so the browser uploads images and PDFs straight to Vercel Blob, bypassing the request body cap. Mirrors `app/api/exam/upload-url`, restricted to image and PDF content types.
+- `app/api/coach/extract/route.ts` — turns one attached Word or plain-text file into plain text (reusing `lib/extractText.ts`), so chat turns stay cheap JSON. Images and PDFs skip this path entirely (see below).
+
+**Visual work vs text.** Word and plain-text files are flattened to text via the extract endpoint. Images **and PDFs** are not: the browser uploads them to Vercel Blob and the chat endpoint hands the model their URLs. Claude reads PDFs page by page, visually, so this is what lets Izzie hand in a marked-up PDF (or a photo) and get the tutor to comment on her actual annotations and how to sharpen them, rather than a transcript with all her marks stripped out. The tutor coaches from the page; it never grades it.
+
+Going through Blob (rather than base64 in the JSON body) is deliberate: a multi-page annotated PDF easily exceeds Vercel's ~4.5MB request body cap, which would otherwise come back as a non-JSON "Request Entity Too Large" page. The model re-fetches each URL every turn (it is stateless), so a large PDF still runs real tokens per turn; the next optimisation would be the Anthropic Files API (upload once, reference by `file_id`). **Coach's attachments therefore need Vercel Blob provisioned** (README step 6), the same `BLOB_READ_WRITE_TOKEN` the exam flow uses. Without it, uploads return a clear error and she can paste the text instead. The uploaded blobs are public (unguessable URLs) and currently persist; cleaning them up on "start fresh" is a sensible follow-up.
+- `lib/coachPrompt.ts` — the tutor system prompt. This is the soul of the module: Socratic, teaches *with* her work and never *does* it, holds the line warmly when she asks it to just write the answer, and calibrates to what she actually knows. Treat changes as deliberate prompt-iteration cycles, same as the marking voice.
+
 ### Shared
 
-- `lib/extractText.ts` — extracts plain text from PDFs, images, Word, or text uploads. Used by Exam Practice for parsing/marking; the Help! flow uses its own extraction inline.
+- `lib/extractText.ts` — extracts plain text from PDFs, images, Word, or text uploads. Used by Exam Practice for parsing/marking and by Coach for attached work; the Help! flow uses its own extraction inline.
 
 ---
 
