@@ -1,0 +1,400 @@
+/* Way In. Scoped to this page so nothing here can reach the rest of Help!.
+   Palette, fonts and shapes come from globals.css; only what is genuinely new
+   lives here. */
+
+.intro {
+  font-size: 15px;
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0 0 24px;
+}
+
+.field { margin-bottom: 22px; }
+.field:last-child { margin-bottom: 0; }
+
+.label {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.optional {
+  font-family: 'Inter Tight', sans-serif;
+  font-weight: 400;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--muted);
+  margin-left: 8px;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 15px;
+  color: var(--ink);
+}
+.input:focus { outline: none; border-color: var(--accent); background: var(--paper); }
+.input::placeholder { color: var(--muted); opacity: 0.7; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.chip {
+  padding: 8px 14px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.chipOn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper);
+}
+.chipOn:hover { background: var(--accent); color: var(--paper); }
+
+/* The four beats across the top of the conversation. Deliberately quiet. */
+.path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+  opacity: 0.55;
+  transition: opacity 0.3s;
+}
+.stepDone { opacity: 0.8; }
+.stepNow { opacity: 1; color: var(--accent); font-weight: 600; }
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+  flex: none;
+}
+.stepDone .dot { background: var(--muted); }
+.stepNow .dot { background: var(--accent); }
+
+.stepGap {
+  flex: 1;
+  min-width: 8px;
+  height: 1px;
+  background: var(--line);
+}
+
+/* Earlier questions and her answers, kept visible but out of the way. */
+.earlier {
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.earlierQ {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0 0 4px;
+}
+
+.earlierA {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0 0 16px;
+  padding-left: 14px;
+  border-left: 2px solid var(--accent-soft);
+  white-space: pre-wrap;
+}
+.earlierA:last-child { margin-bottom: 0; }
+
+.react {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 15px;
+  color: var(--muted);
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.question {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 21px;
+  line-height: 1.4;
+  margin: 0 0 20px;
+}
+
+.answerRow { display: flex; gap: 12px; align-items: flex-end; }
+
+.answer {
+  flex: 1;
+  resize: vertical;
+  min-height: 56px;
+  max-height: 200px;
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 15px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+.answer:focus { outline: none; border-color: var(--accent); background: var(--paper); }
+
+.send {
+  background: var(--accent);
+  color: var(--paper);
+  border: none;
+  border-radius: 6px;
+  padding: 15px 22px;
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.send:hover:not(:disabled) { background: var(--ink); }
+.send:disabled { opacity: 0.45; cursor: default; }
+
+.waiting { display: flex; gap: 5px; padding: 6px 0 2px; }
+.waiting span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.4;
+  animation: wayInBounce 1.2s infinite ease-in-out;
+}
+.waiting span:nth-child(2) { animation-delay: 0.18s; }
+.waiting span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes wayInBounce {
+  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+  40% { opacity: 0.9; transform: translateY(-4px); }
+}
+
+.skipRow { margin-top: 18px; text-align: center; }
+
+.skip {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 13px;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  padding: 0;
+}
+.skip:hover { color: var(--accent); }
+.skip:disabled { opacity: 0.5; cursor: default; }
+
+/* Landing */
+.block {
+  padding: 18px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.block:first-child { padding-top: 0; }
+.block:last-child { border-bottom: none; padding-bottom: 0; }
+
+.blockLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.blockText { margin: 0; font-size: 15px; line-height: 1.6; }
+
+.parkedRow { display: flex; align-items: flex-start; gap: 14px; }
+.parkedRow .blockText { flex: 1; }
+
+.copy {
+  flex: none;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+}
+.copy:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+/* Mirrors the "Start here" block in the generated study guides. */
+.startHere {
+  background: var(--accent);
+  color: var(--paper);
+  border-radius: 6px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.startHereLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  opacity: 0.8;
+  margin-bottom: 8px;
+}
+.startHereText {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.timerRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.timerBtn {
+  background: rgba(251, 249, 244, 0.15);
+  border: 1px solid rgba(251, 249, 244, 0.45);
+  color: var(--paper);
+  border-radius: 4px;
+  padding: 9px 16px;
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.timerBtn:hover { background: rgba(251, 249, 244, 0.28); }
+
+.timerDisplay {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 22px;
+  min-width: 78px;
+  text-align: center;
+  padding: 5px 12px;
+  border-radius: 4px;
+  background: rgba(251, 249, 244, 0.15);
+}
+.timerDone { background: var(--done-soft); color: var(--done); }
+
+.landingActions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.action {
+  flex: 1;
+  min-width: 140px;
+  padding: 15px;
+  border-radius: 6px;
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  transition: all 0.2s;
+}
+.action:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* Pause */
+.pause {
+  text-align: center;
+  padding: 12px 0 4px;
+}
+.pauseText {
+  font-family: 'Fraunces', serif;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 0 0 24px;
+}
+
+/* Parked earlier, collapsed under the start form. */
+.parkedList { margin-top: 40px; }
+
+.parkedToggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--line);
+  padding: 18px 2px 14px;
+  cursor: pointer;
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--muted);
+  text-align: left;
+}
+.parkedToggle:hover { color: var(--accent); }
+.parkedChevron { color: var(--accent); font-size: 18px; line-height: 1; }
+
+.parkedItem {
+  padding: 14px 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.parkedItemText { font-size: 14px; line-height: 1.55; margin: 0 0 6px; }
+.parkedItemMeta { font-size: 12px; color: var(--muted); }
+
+@media (max-width: 480px) {
+  .question { font-size: 19px; }
+  .startHere { padding: 20px; }
+  .startHereText { font-size: 18px; }
+  .answerRow { gap: 8px; }
+  .send { padding: 15px 16px; }
+}
+
+.errorRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.retry {
+  background: var(--accent);
+  border: none;
+  color: var(--paper);
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-family: 'Inter Tight', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.retry:hover:not(:disabled) { background: var(--ink); }
+.retry:disabled { opacity: 0.5; cursor: default; }
