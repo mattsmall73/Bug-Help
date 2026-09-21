@@ -50,6 +50,10 @@ export default function Page() {
           <div className="chooser-card-cta">Find its place →</div>
         </Link>
       </div>
+
+      <div className="secondary-actions" style={{ textAlign: "center", marginTop: 28 }}>
+        Head full of something else? <Link href="/way-in">Try Way In</Link>
+      </div>
     </div>
   );
 }
