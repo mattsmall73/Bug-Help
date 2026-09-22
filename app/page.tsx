@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PENCE_PER_COIN, RATE_PENCE_PER_HOUR, formatShort } from "@/lib/piggy";
 
 export default function Page() {
   return (
@@ -48,6 +49,17 @@ export default function Page() {
             means, and one way to start thinking about it.
           </p>
           <div className="chooser-card-cta">Find its place →</div>
+        </Link>
+
+        <Link href="/piggy-bank" className="chooser-card">
+          <div className="chooser-card-mark">Mode five</div>
+          <h2>Piggy Bank</h2>
+          <p className="chooser-card-sub">
+            Log your extra revision and watch the pig fill up.{" "}
+            {formatShort(RATE_PENCE_PER_HOUR)} an hour, {formatShort(PENCE_PER_COIN)} a quarter. Payday is
+            when Dad pays up.
+          </p>
+          <div className="chooser-card-cta">Feed the pig →</div>
         </Link>
       </div>
     </div>

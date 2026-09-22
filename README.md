@@ -1,9 +1,10 @@
 # Help!
 
-A web app for Izzie with three modes:
+A web app for Izzie with these modes:
 
 - **Help!** (study guide) — drop in a worksheet or essay brief, get back a sequenced study guide with timers, breaks, and a clear stopping point.
 - **Exam Practice** — upload a past paper, spec, and mark scheme. Sit the paper with a timer. Submit, and get back a marked paper with coaching feedback in the Help! voice.
+- **Piggy Bank** — log extra revision time and get paid for it. £2 an hour, 50p a quarter. Payday pays out everything owed and archives it.
 - **Coach** — a conversational tutor. Talk through *how* to approach the work: how to annotate a passage, how to structure an essay, how to start. It teaches with her real work but never does it for her: it points, she does the thinking.
 
 The home page at `/` is a chooser. The three modes share the brand, the engine, the aesthetic, and the voice. They are different jobs.
@@ -146,6 +147,16 @@ Open <http://localhost:3000>.
 
 Going through Blob (rather than base64 in the JSON body) is deliberate: a multi-page annotated PDF easily exceeds Vercel's ~4.5MB request body cap, which would otherwise come back as a non-JSON "Request Entity Too Large" page. The model re-fetches each URL every turn (it is stateless), so a large PDF still runs real tokens per turn; the next optimisation would be the Anthropic Files API (upload once, reference by `file_id`). **Coach's attachments therefore need Vercel Blob provisioned** (README step 6), the same `BLOB_READ_WRITE_TOKEN` the exam flow uses. Without it, uploads return a clear error and she can paste the text instead. The uploaded blobs are public (unguessable URLs) and currently persist; cleaning them up on "start fresh" is a sensible follow-up.
 - `lib/coachPrompt.ts` — the tutor system prompt. This is the soul of the module: Socratic, teaches *with* her work and never *does* it, holds the line warmly when she asks it to just write the answer, and calibrates to what she actually knows. Treat changes as deliberate prompt-iteration cycles, same as the marking voice.
+
+### Piggy Bank
+
+Ported from Elena's Piggy Bank (`mattsmall73/Elena-erm-help....`), moved onto this app's paper look and fonts.
+
+- `app/piggy-bank/page.tsx` — the pig, the week's bars, Feed the pig, Payday and the shout. A ref guards Payday against a double tap.
+- `app/api/piggy-bank/route.ts` — list, add and undo entries. `app/api/piggy-bank/payday/route.ts` — pay out everything owed.
+- `lib/piggy.ts` — the money and date arithmetic. `RATE_PENCE_PER_HOUR` is the one place the rate lives (200). The coin value, subtitle and "first hour" milestone are all worked out from it. Money is whole pence throughout.
+- `lib/piggy-db.ts` — the queries. Every row is keyed to `user_id = 'izzie'`, fixed in code. Payday claims unpaid entries and writes the payout in one transaction, so the amount always comes from the server.
+- `schema-piggy-bank.sql` — run once in the Neon SQL editor, same as `schema.sql`. Needs Neon (step 5). The last query is a separation check: run it before first use.
 
 ### Shared
 
