@@ -1,16 +1,15 @@
 /**
  * Everything about the piggy bank that is arithmetic rather than storage.
  *
- * Kept apart from lib/piggy-db.ts the same way lib/marking.ts is kept apart
- * from lib/revision-db.ts, so the money and the dates can be tested without a
- * database.
+ * Ported from Elena's Piggy Bank. Kept apart from lib/piggy-db.ts so the
+ * money and the dates can be tested without a database.
  */
 
 /**
  * The deal, in one place because it was negotiated and may be negotiated
  * again. Pence per hour, an integer, so nothing here ever touches a float.
  */
-export const RATE_PENCE_PER_HOUR = 100;
+export const RATE_PENCE_PER_HOUR = 200;
 
 /** A coin per quarter of an hour, capped so a long entry still animates. */
 export const MINS_PER_COIN = 15;
@@ -38,10 +37,20 @@ export function pencePerMinutes(mins: number): number {
   return Math.round((mins * RATE_PENCE_PER_HOUR) / 60);
 }
 
+/** What one coin is worth. Worked out from the rate, never typed in. */
+export const PENCE_PER_COIN = pencePerMinutes(MINS_PER_COIN);
+
 export function formatPence(pence: number): string {
   const sign = pence < 0 ? "-" : "";
   const abs = Math.abs(pence);
   return `${sign}£${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+}
+
+/** "50p" under a pound, "£2" on a whole pound, "£2.50" otherwise. For copy
+ *  that quotes the rate, so the words change when the rate does. */
+export function formatShort(pence: number): string {
+  if (pence < 100) return `${pence}p`;
+  return pence % 100 === 0 ? `£${pence / 100}` : formatPence(pence);
 }
 
 /** "45m" below the hour, "1h30" above it, so the label matches the bar. */

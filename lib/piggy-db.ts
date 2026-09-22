@@ -1,13 +1,29 @@
-import { db, sql } from "@vercel/postgres";
-import { USER_ID } from "./user";
-import { pencePerMinutes } from "./piggy";
+import { neon, NeonQueryFunction } from "@neondatabase/serverless";
+import { RATE_PENCE_PER_HOUR } from "./piggy";
 
-/* Separate from lib/db.ts and lib/revision-db.ts for the same reason those are
-   separate from each other: one app's queries cannot break another's. Same
-   client, same POSTGRES_URL, no new dependency.
+/* Ported from Elena's Piggy Bank. Separate from lib/db.ts so one app's queries
+   cannot break another's. Same POSTGRES_URL, same driver, no new dependency.
 
-   USER_ID is a partition key and nothing more. Access control is the passcode
-   gate in proxy.ts plus withSession on every route. */
+   PIGGY_USER_ID is a partition key. It is fixed here in code rather than read
+   from the environment on purpose. Elena's copy reads DOODLE_USER_ID and falls
+   back to "elena", and the two apps may share a database. A hard-coded "izzie"
+   cannot be pointed at her rows by a stray environment variable. Every query
+   below filters on it, including the payday claim. */
+export const PIGGY_USER_ID = "izzie";
+
+let cached: NeonQueryFunction<false, false> | null = null;
+
+function client(): NeonQueryFunction<false, false> {
+  if (cached) return cached;
+  const url = process.env.POSTGRES_URL;
+  if (!url) {
+    throw new Error(
+      "POSTGRES_URL is not set. Provision a Neon database via the Vercel storage integration (custom env prefix POSTGRES_), then redeploy."
+    );
+  }
+  cached = neon(url);
+  return cached;
+}
 
 export interface PiggyEntry {
   id: string;
@@ -31,7 +47,7 @@ const RECENT_DAYS = 40;
 const id = (prefix: string) =>
   `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
-/** Postgres returns a date column as a Date; we want the key back unchanged. */
+/** Postgres returns a date column as a Date or a string; we want the key back unchanged. */
 function dateKey(v: unknown): string {
   if (typeof v === "string") return v.slice(0, 10);
   if (v instanceof Date) {
@@ -45,43 +61,45 @@ function dateKey(v: unknown): string {
 }
 
 export async function getState(): Promise<PiggyState> {
-  const open = await sql`
-    SELECT id, entry_date, mins
-    FROM piggy_entry
-    WHERE user_id = ${USER_ID} AND payout_id IS NULL
-    ORDER BY entry_date DESC, created_at DESC;
-  `;
-
-  const recent = await sql`
-    SELECT DISTINCT entry_date
-    FROM piggy_entry
-    WHERE user_id = ${USER_ID}
-      AND entry_date >= CURRENT_DATE - ${RECENT_DAYS}::int
-    ORDER BY entry_date DESC;
-  `;
-
-  const paid = await sql`
-    SELECT COALESCE(SUM(amount_pence), 0)::int AS total
-    FROM piggy_payout
-    WHERE user_id = ${USER_ID};
-  `;
+  const sql = client();
+  const [open, recent, paid] = (await Promise.all([
+    sql`
+      SELECT id, entry_date::text AS entry_date, mins
+      FROM piggy_entry
+      WHERE user_id = ${PIGGY_USER_ID} AND payout_id IS NULL
+      ORDER BY entry_date DESC, created_at DESC
+    `,
+    sql`
+      SELECT DISTINCT entry_date::text AS entry_date
+      FROM piggy_entry
+      WHERE user_id = ${PIGGY_USER_ID}
+        AND entry_date >= CURRENT_DATE - ${RECENT_DAYS}::int
+      ORDER BY entry_date DESC
+    `,
+    sql`
+      SELECT COALESCE(SUM(amount_pence), 0)::int AS total
+      FROM piggy_payout
+      WHERE user_id = ${PIGGY_USER_ID}
+    `,
+  ])) as Record<string, unknown>[][];
 
   return {
-    open: open.rows.map((r) => ({
+    open: open.map((r) => ({
       id: r.id as string,
       entryDate: dateKey(r.entry_date),
       mins: r.mins as number,
     })),
-    recentDates: recent.rows.map((r) => dateKey(r.entry_date)),
-    lifetimePence: (paid.rows[0]?.total as number) ?? 0,
+    recentDates: recent.map((r) => dateKey(r.entry_date)),
+    lifetimePence: (paid[0]?.total as number) ?? 0,
   };
 }
 
 export async function addEntry(entryDate: string, mins: number): Promise<PiggyEntry> {
+  const sql = client();
   const entry: PiggyEntry = { id: id("pe"), entryDate, mins };
   await sql`
     INSERT INTO piggy_entry (id, user_id, entry_date, mins)
-    VALUES (${entry.id}, ${USER_ID}, ${entryDate}::date, ${mins});
+    VALUES (${entry.id}, ${PIGGY_USER_ID}, ${entryDate}::date, ${mins})
   `;
   return entry;
 }
@@ -91,11 +109,13 @@ export async function addEntry(entryDate: string, mins: number): Promise<PiggyEn
  * number can be taken back and a settled week cannot be edited after the fact.
  */
 export async function deleteOpenEntry(entryId: string): Promise<boolean> {
-  const res = await sql`
+  const sql = client();
+  const rows = (await sql`
     DELETE FROM piggy_entry
-    WHERE id = ${entryId} AND user_id = ${USER_ID} AND payout_id IS NULL;
-  `;
-  return (res.rowCount ?? 0) > 0;
+    WHERE id = ${entryId} AND user_id = ${PIGGY_USER_ID} AND payout_id IS NULL
+    RETURNING id
+  `) as unknown[];
+  return rows.length > 0;
 }
 
 export interface Payout {
@@ -107,73 +127,72 @@ export interface Payout {
 /**
  * Pay out everything outstanding, in one transaction.
  *
- * The order matters and is not the obvious one. The payout row is written
- * first with zero on it, because the entries carry a foreign key to it and
- * cannot point at a row that does not exist yet. Then the UPDATE claims every
- * unpaid entry in a single statement and reports back what it took, which is
- * what makes a second Payday arriving at the same moment harmless: the
- * WHERE payout_id IS NULL can only match each row once, so the second one
- * claims nothing, finds zero minutes and rolls itself away. Only then is the
- * total written onto the payout.
+ * Elena's version runs this as an interactive transaction and does the sum in
+ * JavaScript between statements. The Neon HTTP driver used here sends a
+ * transaction as a single batch, so nothing can run in between. The sum moves
+ * into SQL instead, using the same RATE_PENCE_PER_HOUR passed in as a
+ * parameter. At 200p an hour, mins * 200 / 60 never lands on a half, so
+ * Postgres ROUND and Math.round cannot disagree.
  *
- * The amount is computed here from the minutes the UPDATE actually claimed.
+ * The order is the same as Elena's and for the same reasons:
+ *   1. Write the payout row at zero, because entries carry a foreign key to it.
+ *   2. Claim every unpaid entry in one UPDATE. WHERE payout_id IS NULL can only
+ *      match each row once, so a second Payday arriving at the same moment
+ *      waits on the row locks, then claims nothing.
+ *   3. Write the total onto the payout from the minutes actually claimed.
+ *   4. If nothing was claimed, delete the empty payout.
+ *   5. Read back what was written.
+ *
  * Nothing the browser sends is trusted with money.
- *
- * Everything outstanding rather than only this week: if a Payday gets missed,
- * the hours she worked must still be there to be paid for. That is a reading
- * of the brief rather than a quote from it.
  */
 export async function payday(): Promise<Payout | null> {
+  const sql = client();
   const payoutId = id("po");
-  const client = await db.connect();
-  try {
-    await client.sql`BEGIN`;
 
-    await client.sql`
+  const results = (await sql.transaction([
+    sql`
       INSERT INTO piggy_payout (id, user_id, mins, amount_pence)
-      VALUES (${payoutId}, ${USER_ID}, 0, 0);
-    `;
-
-    const claimed = await client.sql`
+      VALUES (${payoutId}, ${PIGGY_USER_ID}, 0, 0)
+    `,
+    sql`
       UPDATE piggy_entry
       SET payout_id = ${payoutId}
-      WHERE user_id = ${USER_ID} AND payout_id IS NULL
-      RETURNING mins;
-    `;
+      WHERE user_id = ${PIGGY_USER_ID} AND payout_id IS NULL
+    `,
+    sql`
+      UPDATE piggy_payout p
+      SET mins = t.mins,
+          amount_pence = ROUND(t.mins * ${RATE_PENCE_PER_HOUR}::numeric / 60)::int
+      FROM (
+        SELECT COALESCE(SUM(mins), 0)::int AS mins
+        FROM piggy_entry
+        WHERE payout_id = ${payoutId} AND user_id = ${PIGGY_USER_ID}
+      ) t
+      WHERE p.id = ${payoutId}
+    `,
+    sql`
+      DELETE FROM piggy_payout
+      WHERE id = ${payoutId} AND mins = 0
+    `,
+    sql`
+      SELECT mins, amount_pence
+      FROM piggy_payout
+      WHERE id = ${payoutId}
+    `,
+  ])) as Record<string, unknown>[][];
 
-    if (claimed.rows.length === 0) {
-      await client.sql`ROLLBACK`;
-      return null;
-    }
-
-    const mins = claimed.rows.reduce((sum, r) => sum + (r.mins as number), 0);
-    const amountPence = pencePerMinutes(mins);
-
-    await client.sql`
-      UPDATE piggy_payout
-      SET mins = ${mins}, amount_pence = ${amountPence}
-      WHERE id = ${payoutId};
-    `;
-
-    await client.sql`COMMIT`;
-    return { id: payoutId, mins, amountPence };
-  } catch (err) {
-    try {
-      await client.sql`ROLLBACK`;
-    } catch {
-      /* connection is gone; the transaction dies with it */
-    }
-    throw err;
-  } finally {
-    client.release();
-  }
+  const row = results[4]?.[0];
+  if (!row) return null;
+  return {
+    id: payoutId,
+    mins: row.mins as number,
+    amountPence: row.amount_pence as number,
+  };
 }
 
 /** True when the tables have not been created yet. */
 export function isMissingTable(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    (err as { code?: string }).code === "42P01"
-  );
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { code?: string; sourceError?: { code?: string } };
+  return e.code === "42P01" || e.sourceError?.code === "42P01";
 }

@@ -3,9 +3,13 @@
 -- Paste this into the Neon console SQL editor and run it. Safe to run again:
 -- every statement is guarded, so a second run changes nothing.
 --
--- Nothing the other two apps use is touched. Ummm Less Panic owns
--- revision_sheet, revision_answer and revision_mark; Forgetful Doodle owns
--- profile, deck_best and custom_deck. None of them are mentioned here.
+-- Ported unchanged from Elena's app, so if the two apps ever share a Neon
+-- database the tables line up and a second run of this changes nothing. The
+-- apps keep apart by user_id: this one always writes 'izzie' (fixed in
+-- lib/piggy-db.ts), Elena's writes 'elena'. Run the check at the bottom
+-- before first use.
+--
+-- Nothing Exam Practice uses (papers, practice_sessions) is touched.
 
 BEGIN;
 
@@ -75,3 +79,13 @@ WHERE conrelid = 'piggy_entry'::regclass
 
 SELECT indexname FROM pg_indexes
 WHERE tablename = 'piggy_entry' ORDER BY indexname;
+
+-- Separation check. Lists every user_id in the piggy tables with a row count.
+-- On a database only this app uses, expect nothing or only 'izzie'. If
+-- 'elena' appears, the database is shared with Elena's app. That is fine as
+-- long as 'izzie' and 'elena' are separate rows here, which is what keeps her
+-- money apart from Izzie's. Anything else showing up needs a look before use.
+SELECT 'piggy_entry' AS tbl, user_id, COUNT(*) FROM piggy_entry GROUP BY user_id
+UNION ALL
+SELECT 'piggy_payout', user_id, COUNT(*) FROM piggy_payout GROUP BY user_id
+ORDER BY tbl, user_id;

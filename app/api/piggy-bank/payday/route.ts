@@ -1,5 +1,4 @@
 import { isMissingTable, payday } from "@/lib/piggy-db";
-import { withSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +11,7 @@ export const dynamic = "force-dynamic";
  * owed. The guard against a double press lives on the page as well, but this
  * does not depend on it: the claiming UPDATE can only take each entry once.
  */
-export const POST = withSession(async () => {
+export async function POST() {
   try {
     const paid = await payday();
     if (!paid) {
@@ -23,7 +22,7 @@ export const POST = withSession(async () => {
     if (isMissingTable(err)) {
       console.error(
         "[piggy-bank] piggy_entry or piggy_payout is missing. " +
-          "Run scripts/schema-piggy-bank.sql to create them.",
+          "Run schema-piggy-bank.sql to create them.",
       );
       return Response.json(
         { error: "The piggy bank isn't switched on here yet." },
@@ -36,4 +35,4 @@ export const POST = withSession(async () => {
       { status: 500 },
     );
   }
-});
+}

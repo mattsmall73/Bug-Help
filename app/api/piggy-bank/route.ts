@@ -12,16 +12,14 @@ import {
   isDateKey,
   localDateKey,
 } from "@/lib/piggy";
-import { withSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Same shape the marking route uses when its table has not been made yet. */
 function notSetUp() {
   console.error(
     "[piggy-bank] piggy_entry or piggy_payout is missing. " +
-      "Run scripts/schema-piggy-bank.sql to create them.",
+      "Run schema-piggy-bank.sql to create them.",
   );
   return Response.json(
     { error: "The piggy bank isn't switched on here yet." },
@@ -31,8 +29,7 @@ function notSetUp() {
 
 function wentWrong(err: unknown) {
   // The message stays server side. A Postgres error names tables, columns and
-  // sometimes the connection, and that has reached a browser in this repo
-  // before.
+  // sometimes the connection.
   console.error("[piggy-bank] request failed:", err);
   return Response.json(
     { error: "Something went wrong at our end. Try that again." },
@@ -40,7 +37,7 @@ function wentWrong(err: unknown) {
   );
 }
 
-export const GET = withSession(async () => {
+export async function GET() {
   try {
     const state = await getState();
     return Response.json({ ...state, ratePencePerHour: RATE_PENCE_PER_HOUR });
@@ -48,9 +45,9 @@ export const GET = withSession(async () => {
     if (isMissingTable(err)) return notSetUp();
     return wentWrong(err);
   }
-});
+}
 
-export const POST = withSession(async (request) => {
+export async function POST(request: Request) {
   try {
     const body = (await request.json()) as { entryDate?: unknown; mins?: unknown };
 
@@ -87,10 +84,10 @@ export const POST = withSession(async (request) => {
     if (isMissingTable(err)) return notSetUp();
     return wentWrong(err);
   }
-});
+}
 
 /** Undo. The id comes from the open list, and only an unpaid entry can go. */
-export const DELETE = withSession(async (request) => {
+export async function DELETE(request: Request) {
   try {
     const id = new URL(request.url).searchParams.get("id") ?? "";
     if (!id) {
@@ -108,4 +105,4 @@ export const DELETE = withSession(async (request) => {
     if (isMissingTable(err)) return notSetUp();
     return wentWrong(err);
   }
-});
+}
